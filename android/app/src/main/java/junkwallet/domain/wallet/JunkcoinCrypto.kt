@@ -26,6 +26,7 @@ class JunkcoinCrypto @Inject constructor(
     companion object {
         private val secp256k1 = Secp256k1.get()
         private val CURVE_ORDER = java.math.BigInteger("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141", 16)
+        private const val PBKDF2_ITERATIONS = 600_000  // OWASP 2023 recommendation
 
         private val bouncyCastleProvider: BouncyCastleProvider by lazy {
             BouncyCastleProvider()
@@ -534,7 +535,7 @@ class JunkcoinCrypto @Inject constructor(
         val ciphertext = combined.copyOfRange(28, combined.size)
 
         val keyFactory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
-        val spec = PBEKeySpec(password.toCharArray(), salt, 210000, 256)
+        val spec = PBEKeySpec(password.toCharArray(), salt, PBKDF2_ITERATIONS, 256)
         val tmp = keyFactory.generateSecret(spec)
         val secretKey = SecretKeySpec(tmp.encoded, "AES")
 

@@ -171,7 +171,7 @@ class WalletStorage @Inject constructor(
 
     private fun deriveKey(password: String, salt: ByteArray): SecretKey {
         val factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
-        val spec = PBEKeySpec(password.toCharArray(), salt, 100_000, 256)
+        val spec = PBEKeySpec(password.toCharArray(), salt, PBKDF2_ITERATIONS, 256)
         val tmp = factory.generateSecret(spec)
         return SecretKeySpec(tmp.encoded, "AES")
     }
@@ -188,6 +188,7 @@ class WalletStorage @Inject constructor(
         private const val KEY_ADDRESS = "wallet_address"
         private const val KEY_NETWORK = "network_type"
         private const val KEY_DEFAULT_ADDRESS_TYPE = "default_address_type"
+        private const val PBKDF2_ITERATIONS = 600_000  // OWASP 2023 recommendation
 
         const val NETWORK_MAINNET = "mainnet"
         const val NETWORK_TESTNET = "testnet"
