@@ -160,6 +160,68 @@ class WalletStorage @Inject constructor(
         return null
     }
 
+    // ── PIN Storage ──
+
+    /**
+     * Save PIN-encrypted WIF (alternative unlock method).
+     */
+    fun savePinEncryptedWif(wif: String, pin: String) {
+        val salt = generateRandomBytes(16)
+        val iv = generateRandomBytes(12)
+        val key = deriveKey(pin, salt)
+
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(Cipher.ENCRYPT_MODE, key, GCMParameterSpec(128, iv))
+        val ciphertext = cipher.doFinal(wif.toByteArray(Charsets.UTF_8))
+
+        val combined = salt + iv + ciphertext
+        val encoded = Base64.getEncoder().encodeToString(combined)
+        prefs.edit().putString(KEY_PIN_ENCRYPTED_WIF, encoded).apply()
+    }
+
+    /**
+     * Verify PIN by attempting to decrypt PIN-encrypted WIF.
+     */
+    fun verifyPin(pin: String): Boolean {
+        return getDecryptedWifByPin(pin) != null
+    }
+
+    /**
+     * Check if PIN is set.
+     */
+    fun hasPin(): Boolean {
+        return prefs.contains(KEY_PIN_ENCRYPTED_WIF)
+    }
+
+    /**
+     * Remove PIN.
+     */
+    fun clearPin() {
+        prefs.edit().remove(KEY_PIN_ENCRYPTED_WIF).apply()
+    }
+
+    /**
+     * Decrypt WIF using PIN.
+     */
+    fun getDecryptedWifByPin(pin: String): String? {
+        val encoded = prefs.getString(KEY_PIN_ENCRYPTED_WIF, null) ?: return null
+        return try {
+            val combined = Base64.getDecoder().decode(encoded)
+            val salt = combined.copyOfRange(0, 16)
+            val iv = combined.copyOfRange(16, 28)
+            val ciphertext = combined.copyOfRange(28, combined.size)
+
+            val key = deriveKey(pin, salt)
+            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+            cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(128, iv))
+            val plaintext = cipher.doFinal(ciphertext)
+
+            String(plaintext, Charsets.UTF_8)
+        } catch (e: Exception) {
+            null
+        }
+    }
+
     // ── Delete Wallet ──
 
     fun deleteWallet() {
@@ -185,6 +247,7 @@ class WalletStorage @Inject constructor(
     companion object {
         private const val PREFS_FILE_NAME = "junk_wallet_secure"
         private const val KEY_ENCRYPTED_WIF = "encrypted_wif"
+        private const val KEY_PIN_ENCRYPTED_WIF = "pin_encrypted_wif"
         private const val KEY_ADDRESS = "wallet_address"
         private const val KEY_NETWORK = "network_type"
         private const val KEY_DEFAULT_ADDRESS_TYPE = "default_address_type"

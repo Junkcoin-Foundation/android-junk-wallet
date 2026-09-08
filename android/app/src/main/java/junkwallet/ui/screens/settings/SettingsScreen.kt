@@ -13,11 +13,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
@@ -27,14 +29,18 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -42,6 +48,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import junkwallet.domain.model.AddressType
 import junkwallet.domain.model.NetworkType
@@ -68,11 +76,30 @@ fun SettingsScreen(
     defaultAddressType: AddressType = AddressType.P2PKH,
     onAddressTypeChanged: (AddressType) -> Unit = {},
     biometricEnabled: Boolean = false,
-    onBiometricChanged: (Boolean) -> Unit = {}
+    onBiometricChanged: (Boolean) -> Unit = {},
+    hasPin: Boolean = false,
+    onPinSetup: (String) -> Unit = {},
+    onPinRemove: () -> Unit = {}
 ) {
     var showNetworkMenu by remember { mutableStateOf(false) }
     var showAddressTypeMenu by remember { mutableStateOf(false) }
+    var showPinDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
+
+    if (showPinDialog) {
+        PinSetupDialog(
+            hasPin = hasPin,
+            onDismiss = { showPinDialog = false },
+            onPinSet = { pin ->
+                onPinSetup(pin)
+                showPinDialog = false
+            },
+            onPinRemove = {
+                onPinRemove()
+                showPinDialog = false
+            }
+        )
+    }
 
     Scaffold(
         containerColor = Background,
@@ -113,6 +140,13 @@ fun SettingsScreen(
                         subtitle = "Use fingerprint to unlock wallet",
                         checked = biometricEnabled,
                         onCheckedChange = onBiometricChanged
+                    )
+
+                    // PIN Lock
+                    SettingClickable(
+                        title = "PIN Lock",
+                        subtitle = if (hasPin) "Change or remove PIN" else "Set up PIN for quick unlock",
+                        onClick = { showPinDialog = true }
                     )
 
                     // Key Vault
@@ -477,6 +511,115 @@ private fun SettingClickable(
             )
         }
     }
+}
+
+@Composable
+private fun PinSetupDialog(
+    hasPin: Boolean,
+    onDismiss: () -> Unit,
+    onPinSet: (String) -> Unit,
+    onPinRemove: () -> Unit
+) {
+    var pin by remember { mutableStateOf("") }
+    var confirmPin by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
+    var step by remember { mutableIntStateOf(0) } // 0 = enter new pin, 1 = confirm pin
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = SurfaceContainer,
+        title = {
+            Text(
+                text = if (step == 0) "Set PIN" else "Confirm PIN",
+                color = TextHighEmphasis
+            )
+        },
+        text = {
+            Column {
+                if (hasPin && step == 0) {
+                    Text(
+                        text = "Enter new 4-6 digit PIN",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = TextMuted
+                    )
+                } else if (step == 0) {
+                    Text(
+                        text = "Enter a 4-6 digit PIN for quick unlock",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = TextMuted
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                OutlinedTextField(
+                    value = if (step == 0) pin else confirmPin,
+                    onValueChange = { value ->
+                        if (value.length <= 6 && value.all { it.isDigit() }) {
+                            if (step == 0) pin = value else confirmPin = value
+                            error = null
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    visualTransformation = PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = PrimaryCyan,
+                        unfocusedBorderColor = SurfaceContainerHigh
+                    ),
+                    shape = MaterialTheme.shapes.medium,
+                    singleLine = true,
+                    isError = error != null,
+                    placeholder = { Text("Enter PIN", color = TextMuted) }
+                )
+
+                if (error != null) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = error!!,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = ErrorCrimson
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Row {
+                if (hasPin) {
+                    TextButton(onClick = onPinRemove) {
+                        Text("Remove PIN", color = ErrorCrimson)
+                    }
+                }
+                Spacer(modifier = Modifier.weight(1f))
+                TextButton(onClick = onDismiss) {
+                    Text("Cancel", color = TextMuted)
+                }
+                TextButton(
+                    onClick = {
+                        if (step == 0) {
+                            if (pin.length < 4) {
+                                error = "PIN must be at least 4 digits"
+                            } else {
+                                step = 1
+                            }
+                        } else {
+                            if (pin != confirmPin) {
+                                error = "PINs do not match"
+                                step = 0
+                                pin = ""
+                                confirmPin = ""
+                            } else {
+                                onPinSet(pin)
+                            }
+                        }
+                    }
+                ) {
+                    Text("OK", color = PrimaryCyan)
+                }
+            }
+        },
+        dismissButton = null
+    )
 }
 
 

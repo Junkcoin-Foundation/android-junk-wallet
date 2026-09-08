@@ -20,7 +20,10 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import junkwallet.data.storage.SettingsStorage
 import junkwallet.data.storage.WalletStorage
+import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.launch
 import junkwallet.ui.navigation.BottomNavBar
 import junkwallet.domain.model.TransactionInfo
 import junkwallet.ui.navigation.Screen
@@ -42,7 +45,8 @@ import junkwallet.utils.parseQrPaymentData
 @Composable
 fun JunkWalletNavHost(
     navController: NavHostController = rememberNavController(),
-    walletStorage: WalletStorage
+    walletStorage: WalletStorage,
+    settingsStorage: SettingsStorage
 ) {
     val hasWallet = remember { walletStorage.hasStoredWallet() }
     val navBackStackEntry by navController.currentBackStackEntryAsState()
@@ -124,12 +128,26 @@ fun JunkWalletNavHost(
                         lockError = "Incorrect password"
                     }
                 },
+                onPinVerified = { pin ->
+                    val wif = walletStorage.getDecryptedWifByPin(pin)
+                    if (wif != null) {
+                        val address = walletStorage.getAddress() ?: ""
+                        walletStorage.saveSessionWif(wif)
+                        walletViewModel.unlock(wif, address)
+                        lockError = null
+                        navController.navigate(Screen.Dashboard.route) {
+                            popUpTo(Screen.Lock.route) { inclusive = true }
+                        }
+                    } else {
+                        lockError = "Incorrect PIN"
+                    }
+                },
                 onBiometricRequested = {
                     if (activity != null) {
                         junkwallet.util.BiometricHelper.showBiometricPrompt(
                             activity = activity,
                             onSuccess = {
-                                // Get WIF from storage (biometric verified identity)
+                                // Biometric verified — try to get WIF from session or encrypted storage
                                 val wif = walletStorage.getSessionWif()
                                 if (wif != null) {
                                     val address = walletStorage.getAddress() ?: ""
@@ -150,6 +168,8 @@ fun JunkWalletNavHost(
                         )
                     }
                 },
+                hasStoredWallet = walletStorage.hasStoredWallet(),
+                hasPin = walletStorage.hasPin(),
                 error = lockError,
                 biometricAvailable = junkwallet.util.BiometricHelper.isBiometricAvailable(context)
             )
@@ -304,6 +324,7 @@ fun JunkWalletNavHost(
             val walletViewModel: WalletViewModel = hiltViewModel()
             val uiState by walletViewModel.uiState.collectAsState()
             val defaultAddressType by walletViewModel.defaultAddressType.collectAsState()
+            val biometricEnabled by settingsStorage.biometricEnabled.collectAsState(initial = false)
 
             SettingsScreen(
                 onBack = { navController.popBackStack() },
@@ -318,8 +339,21 @@ fun JunkWalletNavHost(
                 onNetworkChanged = { walletViewModel.switchNetwork(it) },
                 defaultAddressType = defaultAddressType,
                 onAddressTypeChanged = { walletViewModel.setDefaultAddressType(it) },
-                biometricEnabled = false, // TODO: read from storage
-                onBiometricChanged = { /* TODO: save to storage */ }
+                biometricEnabled = biometricEnabled,
+                onBiometricChanged = {
+                    kotlinx.coroutines.MainScope().launch {
+                        settingsStorage.setBiometricEnabled(it)
+                    }
+                },
+                hasPin = walletStorage.hasPin(),
+                onPinSetup = { pin ->
+                    // Save PIN: encrypt current WIF with PIN
+                    val wif = walletStorage.getSessionWif()
+                    if (wif != null) {
+                        walletStorage.savePinEncryptedWif(wif, pin)
+                    }
+                },
+                onPinRemove = { walletStorage.clearPin() }
             )
         }
 
