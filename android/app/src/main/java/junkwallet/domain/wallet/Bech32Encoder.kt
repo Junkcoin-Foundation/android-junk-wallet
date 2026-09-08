@@ -35,8 +35,8 @@ class Bech32Encoder @Inject constructor() {
         val converted = convertBits(program.map { it.toInt() and 0xFF }, 8, 5, true)
         data.addAll(converted)
 
-        // Compute checksum
-        val polymod = polymod(data + listOf(0, 0, 0, 0, 0, 0)) xor (if (witnessVersion == 0) 1 else BECH32M_CONST)
+        // Compute checksum: polymod(hrp_expand(hrp) + data + [0,0,0,0,0,0])
+        val polymod = polymod(hrpExpand(hrp) + data + listOf(0, 0, 0, 0, 0, 0)) xor (if (witnessVersion == 0) 1 else BECH32M_CONST)
         val checksum = IntArray(6)
         for (i in 0 until 6) {
             checksum[i] = (polymod shr 5 * (5 - i)) and 0x1f
@@ -72,8 +72,9 @@ class Bech32Encoder @Inject constructor() {
             index
         }.toIntArray()
 
-        // Verify checksum
-        val polymod = polymod(data.toList() + listOf(0, 0, 0, 0, 0, 0))
+        // Verify checksum: polymod(hrp_expand(hrp) + data) == 1 for bech32, == BECH32M_CONST for bech32m
+        // data already includes the 6 checksum characters from the address string
+        val polymod = polymod(hrpExpand(hrp) + data.toList())
         val bech32m = polymod == BECH32M_CONST
 
         if (polymod != 1 && polymod != BECH32M_CONST) {
@@ -165,6 +166,21 @@ class Bech32Encoder @Inject constructor() {
             }
         }
         return chk
+    }
+
+    /**
+     * Expand the HRP into values for checksum computation (BIP-173).
+     */
+    private fun hrpExpand(hrp: String): List<Int> {
+        val result = mutableListOf<Int>()
+        for (c in hrp) {
+            result.add(c.code shr 5)
+        }
+        result.add(0)
+        for (c in hrp) {
+            result.add(c.code and 31)
+        }
+        return result
     }
 
     /**
