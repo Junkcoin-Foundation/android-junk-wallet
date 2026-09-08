@@ -119,6 +119,7 @@ dependencies {
 
     // Crypto
     implementation(libs.bouncycastle)
+    implementation(libs.secp256k1.kmp)
 
     // Room
     implementation(libs.room.runtime)

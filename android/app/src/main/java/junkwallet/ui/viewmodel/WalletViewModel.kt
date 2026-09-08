@@ -322,7 +322,10 @@ class WalletViewModel @Inject constructor(
                 AddressType.P2PKH -> crypto.createP2PKHAddress(compressedPubKey, networkParams)
                 AddressType.P2SH_P2WPKH -> crypto.createP2SH_P2WPKHAddress(compressedPubKey, networkParams)
                 AddressType.P2WPKH -> crypto.createP2WPKHAddress(compressedPubKey, networkParams)
-                AddressType.P2TR -> crypto.createP2TRAddress(compressedPubKey, networkParams)
+                AddressType.P2TR -> {
+                    val privateKeyBytes = crypto.getPrivateKeyBytes(keyPair.private)
+                    crypto.createP2TRAddressWithKey(privateKeyBytes, networkParams)
+                }
             }
         } catch (e: Exception) {
             null
@@ -402,7 +405,10 @@ class WalletViewModel @Inject constructor(
                 AddressType.P2PKH -> crypto.createP2PKHAddress(compressedPubKey, networkParams)
                 AddressType.P2SH_P2WPKH -> crypto.createP2SH_P2WPKHAddress(compressedPubKey, networkParams)
                 AddressType.P2WPKH -> crypto.createP2WPKHAddress(compressedPubKey, networkParams)
-                AddressType.P2TR -> crypto.createP2TRAddress(compressedPubKey, networkParams)
+                AddressType.P2TR -> {
+                    val privateKeyBytes = crypto.getPrivateKeyBytes(keyPair.private)
+                    crypto.createP2TRAddressWithKey(privateKeyBytes, networkParams)
+                }
             }
         } catch (e: Exception) {
             null

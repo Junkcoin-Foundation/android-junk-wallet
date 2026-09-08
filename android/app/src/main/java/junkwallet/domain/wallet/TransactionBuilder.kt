@@ -100,7 +100,7 @@ class TransactionBuilder @Inject constructor(
             outputs = outputs
         )
 
-        val signedTransaction = signTransaction(keyPair, transaction, selectedUtxos.map { it.value }, inputAddressType)
+        val signedTransaction = signTransaction(keyPair, transaction, selectedUtxos.map { it.value }, inputAddressType, changeAddress, network)
         val rawTx = serializeTransaction(signedTransaction)
         val txId = calculateTxId(rawTx)
 
@@ -117,11 +117,21 @@ class TransactionBuilder @Inject constructor(
         keyPair: java.security.KeyPair,
         transaction: Transaction,
         utxoValues: List<Long>,
-        inputAddressType: AddressType
+        inputAddressType: AddressType,
+        changeAddress: String,
+        network: JunkcoinParams
     ): Transaction {
+        // Build scriptPubKeys for all inputs (needed for BIP-341 sighash)
+        val allScriptPubKeys = transaction.inputs.map {
+            crypto.createLockingScript(changeAddress, network)
+        }
+
         val signedInputs = transaction.inputs.mapIndexed { index, input ->
             val utxoValue = utxoValues[index]
-            val signature = signer.sign(keyPair, transaction, index, utxoValue, inputAddressType)
+            val signature = signer.sign(
+                keyPair, transaction, index, utxoValue, inputAddressType,
+                allUtxoValues = utxoValues, allScriptPubKeys = allScriptPubKeys
+            )
             val compressedPubKey = crypto.getCompressedPublicKey(keyPair.public)
 
             when (inputAddressType) {
@@ -129,6 +139,7 @@ class TransactionBuilder @Inject constructor(
                     input.copy(scriptSig = ByteArray(0), witness = listOf(signature, compressedPubKey))
                 }
                 AddressType.P2TR -> {
+                    // signature is already 64-byte Schnorr (no DER encoding)
                     input.copy(scriptSig = ByteArray(0), witness = listOf(signature))
                 }
                 AddressType.P2PKH -> {
