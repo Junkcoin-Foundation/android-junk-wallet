@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Junkcoin Wallet</string>
+
+    <!-- Navigation -->
+    <string name="nav_wallet">Wallet</string>
+    <string name="nav_send">Send</string>
+    <string name="nav_history">History</string>
+    <string name="nav_settings">Settings</string>
+
+    <!-- Common -->
+    <string name="confirm">Confirm</string>
+    <string name="cancel">Cancel</string>
+    <string name="copy">Copy</string>
+    <string name="paste">Paste</string>
+    <string name="close">Close</string>
+    <string name="back">Back</string>
+    <string name="next">Next</string>
+    <string name="done">Done</string>
+    <string name="error">Error</string>
+    <string name="loading">Loading…</string>
+
+    <!-- Wallet Setup -->
+    <string name="setup_title">Welcome to Junkcoin Wallet</string>
+    <string name="setup_create">Create New Wallet</string>
+    <string name="setup_import">Import Existing Wallet</string>
+    <string name="setup_description">A self-custodial wallet for Junkcoin (JKC)</string>
+
+    <!-- Create Wallet -->
+    <string name="create_title">Create Wallet</string>
+    <string name="create_backup_warning">Write down your private key and store it somewhere safe. This is the only way to recover your wallet.</string>
+    <string name="create_confirm_backup">I have saved my private key</string>
+
+    <!-- Import Wallet -->
+    <string name="import_title">Import Wallet</string>
+    <string name="import_hint">Enter your WIF private key</string>
+    <string name="import_error">Invalid private key</string>
+
+    <!-- Lock Screen -->
+    <string name="lock_title">Unlock Wallet</string>
+    <string name="lock_hint">Enter your password</string>
+    <string name="lock_error">Incorrect password</string>
+    <string name="lock_biometric">Unlock with fingerprint</string>
+
+    <!-- Dashboard -->
+    <string name="balance_title">Balance</string>
+    <string name="balance_confirmed">Confirmed</string>
+    <string name="balance_unconfirmed">Pending</string>
+    <string name="recent_activity">Recent Activity</string>
+    <string name="no_transactions">No transactions yet</string>
+
+    <!-- Send -->
+    <string name="send_title">Send JKC</string>
+    <string name="send_recipient">Recipient Address</string>
+    <string name="send_amount">Amount (JKC)</string>
+    <string name="send_fee">Transaction Fee</string>
+    <string name="send_fee_slow">Economy</string>
+    <string name="send_fee_standard">Standard</string>
+    <string name="send_fee_priority">Priority</string>
+    <string name="send_insufficient_balance">Insufficient balance</string>
+    <string name="send_invalid_address">Invalid address</string>
+    <string name="send_op_return">OP_RETURN Data</string>
+
+    <!-- Receive -->
+    <string name="receive_title">Receive JKC</string>
+    <string name="receive_address_label">Your Address</string>
+    <string name="receive_share">Share Address</string>
+
+    <!-- History -->
+    <string name="history_title">Transaction History</string>
+    <string name="history_sent">Sent</string>
+    <string name="history_received">Received</string>
+    <string name="history_pending">Pending</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_network">Network</string>
+    <string name="settings_network_mainnet">Mainnet</string>
+    <string name="settings_network_testnet">Testnet</string>
+    <string name="settings_security">Security</string>
+    <string name="settings_biometric">Fingerprint Unlock</string>
+    <string name="settings_auto_lock">Auto-lock Timeout</string>
+    <string name="settings_key_vault">Key Vault</string>
+    <string name="settings_export_key">Export Private Key</string>
+    <string name="settings_import_key">Import Private Key</string>
+    <string name="settings_about">About</string>
+    <string name="settings_version">Version %1$s</string>
+
+    <!-- Key Vault -->
+    <string name="vault_title">Private Key Vault</string>
+    <string name="vault_export_warning">Your private key will be revealed. Make sure no one is watching your screen.</string>
+    <string name="vault_reveal">Reveal Key</string>
+    <string name="vault_hide">Hide Key</string>
+    <string name="vault_copied">Private key copied to clipboard</string>
+
+    <!-- Amounts -->
+    <string name="amount_jkc">%1$s JKC</string>
+    <string name="amount_usd">≈ $%1$s USD</string>
+    <string name="amount_sats">%1$s sat</string>
+
+    <!-- Time -->
+    <string name="time_just_now">Just now</string>
+    <string name="time_minutes_ago">%1$d min ago</string>
+    <string name="time_hours_ago">%1$d hr ago</string>
+    <string name="time_days_ago">%1$d days ago</string>
+    <string name="time_block_height">#%1$d</string>
+
+    <!-- Error Messages -->
+    <string name="error_network">Network error. Please check your connection.</string>
+    <string name="error_server">Server error. Please try again later.</string>
+    <string name="error_unknown">Something went wrong.</string>
+    <string name="error_camera_permission">Camera permission is required for QR scanning.</string>
+</resources>

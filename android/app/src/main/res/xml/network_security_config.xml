@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">junk-api.s3na.xyz</domain>
+        <domain includeSubdomains="true">junk-api-testnet.s3na.xyz</domain>
+        <domain includeSubdomains="true">api.coingecko.com</domain>
+        <domain includeSubdomains="true">explorer.junk-coin.com</domain>
+    </domain-config>
+</network-security-config>

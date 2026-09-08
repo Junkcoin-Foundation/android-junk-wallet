@@ -1,0 +1,293 @@
+<!DOCTYPE html><html class="dark" lang="en"><head><meta charset="utf-8"><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"><link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Inter:wght@400;500;600&amp;family=JetBrains+Mono:wght@400;500;700&amp;display=swap" rel="stylesheet"><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { colors: { "surface-container-high": "#262a33", "tertiary-fixed": "#ffddb8", "error": "#ffb4ab", "on-tertiary-fixed-variant": "#653e00", "on-error-container": "#ffdad6", "surface-bright": "#353942", "on-primary-fixed": "#001f26", "surface": "#0f131c", "secondary-fixed": "#6ffbbe", "on-primary-container": "#00424f", "on-secondary-fixed": "#002113", "on-tertiary": "#472a00", "on-surface": "#dfe2ee", "outline-variant": "#3d494c", "on-surface-variant": "#bcc9cd", "surface-dim": "#0f131c", "surface-container-highest": "#31353e", "tertiary-container": "#e79400", "inverse-on-surface": "#2c3039", "secondary-fixed-dim": "#4edea3", "primary-fixed": "#acedff", "secondary": "#4edea3", "surface-container-low": "#181c24", "error-container": "#93000a", "surface-variant": "#31353e", "primary": "#4cd7f6", "primary-fixed-dim": "#4cd7f6", "on-secondary-fixed-variant": "#005236", "on-secondary-container": "#00311f", "inverse-primary": "#00687a", "surface-container-lowest": "#0a0e16", "on-background": "#dfe2ee", "surface-tint": "#4cd7f6", "on-tertiary-fixed": "#2a1700", "primary-container": "#06b6d4", "tertiary-fixed-dim": "#ffb95f", "surface-container": "#1c2028", "secondary-container": "#00a572", "on-primary": "#003640", "on-secondary": "#003824", "on-tertiary-container": "#563400", "on-error": "#690005", "background": "#0f131c", "on-primary-fixed-variant": "#004e5c", "outline": "#869397", "inverse-surface": "#dfe2ee", "tertiary": "#ffb95f" }, borderRadius: { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" }, spacing: { "gutter-mobile": "1rem", "unit-md": "0.75rem", "unit-2xl": "2rem", "unit-xs": "0.25rem", "touch-target-min": "3rem", "unit-lg": "1.25rem", "unit-2xs": "0.125rem", "unit-3xl": "3rem", "unit-base": "1rem", "unit-xl": "1.5rem", "margin-mobile": "1rem", "unit-sm": "0.5rem" }, fontFamily: { "mono-sm": ["JetBrains Mono"], "headline-lg": ["Geist"], "headline-md": ["Geist"], "mono-lg": ["JetBrains Mono"], "headline-sm": ["Geist"], "mono-md": ["JetBrains Mono"], "headline-xl": ["Geist"], "body-md": ["Inter"], "body-sm": ["Inter"], "headline-xl-mobile": ["Geist"], "body-lg": ["Inter"], "label-caps": ["JetBrains Mono"] }, fontSize: { "mono-sm": ["11px", { lineHeight: "14px", letterSpacing: "0.02em", fontWeight: "400" }], "headline-lg": ["24px", { lineHeight: "32px", letterSpacing: "-0.02em", fontWeight: "600" }], "headline-md": ["20px", { lineHeight: "28px", letterSpacing: "-0.015em", fontWeight: "600" }], "mono-lg": ["15px", { lineHeight: "22px", letterSpacing: "-0.01em", fontWeight: "500" }], "headline-sm": ["16px", { lineHeight: "24px", fontWeight: "600" }], "mono-md": ["13px", { lineHeight: "18px", fontWeight: "500" }], "headline-xl": ["36px", { lineHeight: "44px", letterSpacing: "-0.025em", fontWeight: "700" }], "body-md": ["14px", { lineHeight: "20px", fontWeight: "400" }], "body-sm": ["12px", { lineHeight: "16px", fontWeight: "400" }], "headline-xl-mobile": ["28px", { lineHeight: "36px", letterSpacing: "-0.02em", fontWeight: "700" }], "body-lg": ["16px", { lineHeight: "24px", fontWeight: "400" }], "label-caps": ["10px", { lineHeight: "12px", letterSpacing: "0.08em", fontWeight: "700" }] } } } };</script><style>@layer base{html,body{width:100%;min-height:100%;margin:0;padding:0;background-color:#0f131c;}body{overscroll-behavior:none;-webkit-font-smoothing:antialiased;}.pb-safe{padding-bottom:env(safe-area-inset-bottom,0px);}.pt-safe{padding-top:env(safe-area-inset-top,0px);}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head><body class="bg-surface text-on-surface font-body-md text-body-md flex flex-col selection:bg-primary selection:text-on-primary"><header class="fixed top-0 w-full z-50 pt-safe bg-surface/80 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)]"><div class="h-16 px-margin-mobile flex items-center justify-between gap-unit-sm"><div class="flex items-center gap-unit-sm min-w-0 flex-1"><img alt="Junkcoin Token Logo" class="h-8 w-auto object-contain shrink-0" src="https://lh3.googleusercontent.com/aida/AEtjO1XjXoH9LWGmd8dEqJHiD8JbKr28Z3aGdoUhPlY_5icHkvvei--E2sLzFXurQdSD_iX73V8uZtO3u2OvIMZRwnmFFTztHHkZDSjJH9gvZRVav7wJlgDEQiH8eADA7_d3yJJs5G8dYNMaIcT5pNw1KeH_bQhetUDFzAm5Mf7n5kMYuaxGndlp7iBdulhbcnLbZ9jEAsPD_f3qfu0e73-wL80e2GW9n2At1MFHJPv5sNupEKOMxcs3zXG87Q"><div class="flex flex-col min-w-0"><span class="font-headline-sm text-headline-sm text-on-surface truncate tracking-tight">Junkcoin</span><div class="inline-flex items-center gap-unit-xs px-unit-xs py-0.5 rounded-full bg-surface-container-high/60 self-start"><span class="w-1.5 h-1.5 rounded-full bg-secondary animate-pulse"></span><span class="font-mono-sm text-mono-sm text-on-surface-variant truncate">Mainnet · #1,482,903</span></div></div></div><div class="flex items-center gap-unit-xs shrink-0"><button aria-label="Notifications" class="w-11 h-11 flex items-center justify-center rounded-full text-on-surface-variant hover:text-on-surface transition-colors"><span class="material-symbols-outlined text-[20px]">notifications</span></button><button aria-label="Lock Session" class="w-11 h-11 flex items-center justify-center rounded-full text-on-surface-variant hover:text-primary transition-colors"><span class="material-symbols-outlined text-[20px]">lock</span></button><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center ml-unit-xs"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div></div></div></header><main class="flex flex-col relative w-full min-h-screen px-margin-mobile pt-16 pb-24 bg-surface"><div class="flex flex-col w-full pb-10 space-y-unit-lg">
+<!-- Top Context Header & Security Pulse -->
+<div class="relative overflow-hidden rounded-xl bg-surface-container-low p-unit-base shadow-md">
+<div class="absolute -right-8 -top-8 w-32 h-32 bg-primary/10 rounded-full blur-2xl pointer-events-none"></div>
+<div class="relative z-10 flex items-start justify-between">
+<div class="space-y-1">
+<div class="flex items-center gap-unit-xs">
+<span class="w-2 h-2 rounded-full bg-secondary animate-pulse"></span>
+<span class="font-label-caps text-label-caps text-secondary uppercase tracking-wider">Hardware Enclave Active</span>
+</div>
+<h2 class="font-headline-md text-headline-md text-on-surface">Primary UTXO Vault</h2>
+
+</div>
+<div class="w-10 h-10 rounded-lg bg-surface-container-high flex items-center justify-center text-primary shadow-inner">
+<span class="material-symbols-outlined text-[24px]">vpn_key</span>
+</div>
+</div>
+<!-- Security Vitality Score Strip -->
+<div class="mt-unit-base pt-unit-base bg-surface-container/60 -mx-unit-base -mb-unit-base p-unit-base flex items-center justify-between"><div class="flex items-center gap-unit-sm"><span class="material-symbols-outlined text-[18px] text-secondary">verified_user</span><span class="font-mono-sm text-mono-sm text-on-surface">Sovereign Enclave Storage</span></div><span class="font-mono-sm text-mono-sm text-secondary flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full bg-secondary"></span>Verified</span></div>
+</div>
+<!-- Security & Authentication -->
+<section class="space-y-unit-sm">
+<div class="flex items-center justify-between px-unit-xs">
+<h3 class="font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider">Authentication &amp; Access</h3>
+<span class="font-mono-sm text-mono-sm text-secondary">Encrypted (AES-256-GCM)</span>
+</div>
+<div class="rounded-xl bg-surface-container divide-y-0 space-y-1 p-unit-xs shadow-sm">
+<!-- Biometric Toggle -->
+<div class="flex items-center justify-between p-unit-sm rounded-lg hover:bg-surface-container-high/50 transition-colors">
+<div class="flex items-center gap-unit-md">
+<div class="w-10 h-10 rounded-lg bg-surface-container-high flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[20px]">fingerprint</span>
+</div>
+<div>
+<p class="font-headline-sm text-headline-sm text-on-surface">Biometrics (FaceID / Fingerprint)</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Prompt for UTXO signing &amp; key export</p>
+</div>
+</div>
+<button aria-checked="true" class="w-12 h-7 bg-primary rounded-full p-1 transition-colors relative flex items-center" id="bio-toggle" onclick="toggleSwitch(this)" role="switch" type="button">
+<div class="w-5 h-5 bg-on-primary rounded-full transform translate-x-5 transition-transform"></div>
+</button>
+</div>
+<!-- PIN Code -->
+<div class="flex items-center justify-between p-unit-sm rounded-lg hover:bg-surface-container-high/50 transition-colors cursor-pointer">
+<div class="flex items-center gap-unit-md">
+<div class="w-10 h-10 rounded-lg bg-surface-container-high flex items-center justify-center text-on-surface">
+<span class="material-symbols-outlined text-[20px]">dialpad</span>
+</div>
+<div>
+<p class="font-headline-sm text-headline-sm text-on-surface">App PIN Code</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant">6-digit broadcast PIN configured</p>
+</div>
+</div>
+<div class="flex items-center gap-unit-xs text-on-surface-variant">
+<span class="font-mono-md text-mono-md tracking-widest text-primary">••••••</span>
+<span class="material-symbols-outlined text-[18px]">chevron_right</span>
+</div>
+</div>
+<!-- Auto Lock -->
+<div class="flex items-center justify-between p-unit-sm rounded-lg hover:bg-surface-container-high/50 transition-colors cursor-pointer">
+<div class="flex items-center gap-unit-md">
+<div class="w-10 h-10 rounded-lg bg-surface-container-high flex items-center justify-center text-on-surface">
+<span class="material-symbols-outlined text-[20px]">timer</span>
+</div>
+<div>
+<p class="font-headline-sm text-headline-sm text-on-surface">Auto-Lock Timeout</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Clear memory buffer</p>
+</div>
+</div>
+<div class="flex items-center gap-unit-xs text-on-surface-variant">
+<span class="font-mono-sm text-mono-sm text-on-surface bg-surface-container-high px-2 py-1 rounded">Immediate on exit</span>
+<span class="material-symbols-outlined text-[18px]">expand_more</span>
+</div>
+</div>
+</div>
+</section>
+<!-- Strictly Private Key Management -->
+<section class="space-y-unit-sm">
+<div class="flex items-center justify-between px-unit-xs">
+<h3 class="font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider">Raw Key Sovereignty</h3>
+<span class="font-label-caps text-label-caps text-tertiary">Seedless Protocol</span>
+</div>
+<!-- Export Warning Notice -->
+<div class="rounded-lg bg-surface-container px-unit-md py-2 flex items-center gap-unit-sm text-tertiary shadow-sm"><span class="material-symbols-outlined text-[18px] shrink-0">warning</span><span class="font-body-sm text-body-sm text-on-surface-variant truncate">Never share raw keys. Junkcoin developers will never ask for them.</span></div>
+<!-- Key Actions Grid -->
+<div class="space-y-2">
+<!-- Export Private Key Tile -->
+<div class="rounded-xl bg-surface-container p-unit-base shadow-sm space-y-unit-md">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-unit-md">
+<div class="w-10 h-10 rounded-lg bg-surface-container-high flex items-center justify-center text-tertiary">
+<span class="material-symbols-outlined text-[20px]">key_visualizer</span>
+</div>
+<div>
+<p class="font-headline-sm text-headline-sm text-on-surface">Export Private Key (WIF / Hex)</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Requires hardware biometric prompt</p>
+</div>
+</div>
+</div>
+<!-- Hidden Key Chamber Reveal Mock -->
+<div class="rounded-lg bg-surface-container-lowest p-unit-md relative overflow-hidden" id="pk-chamber">
+<div class="flex items-center justify-between">
+<div class="font-mono-sm text-mono-sm text-on-surface-variant truncate pr-2" id="pk-string">
+              KxZ5vR89...••••••••••••••••...89AqP
+            </div>
+<button class="shrink-0 px-unit-sm py-1.5 rounded-lg bg-surface-container-high text-primary hover:bg-surface-bright transition-colors font-mono-sm text-mono-sm flex items-center gap-1" id="btn-reveal" onclick="revealKey()">
+<span class="material-symbols-outlined text-[16px]">visibility</span>
+<span class="">Reveal</span>
+</button>
+</div>
+<div class="hidden mt-2 pt-2 border-t border-surface-container-high flex items-center justify-between text-tertiary font-mono-sm text-mono-sm" id="pk-warning">
+<span class="flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">lock_clock</span> WIF Base58 Format</span>
+<button class="text-primary hover:underline flex items-center gap-0.5" onclick="copyKey()">
+<span class="material-symbols-outlined text-[14px]">content_copy</span> Copy
+            </button>
+</div>
+</div>
+</div>
+<!-- Import Key Card -->
+<div class="rounded-xl bg-surface-container p-unit-base shadow-sm flex items-center justify-between">
+<div class="flex items-center gap-unit-md">
+<div class="w-10 h-10 rounded-lg bg-surface-container-high flex items-center justify-center text-primary">
+<span class="material-symbols-outlined text-[20px]">qr_code_scanner</span>
+</div>
+<div>
+<p class="font-headline-sm text-headline-sm text-on-surface">Restore / Import Key</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Direct WIF, Mini-Key, or Hex string</p>
+</div>
+</div>
+<button class="px-unit-md py-2 bg-surface-container-high hover:bg-surface-bright text-on-surface rounded-lg font-mono-sm text-mono-sm transition-colors flex items-center gap-1" onclick="triggerImportModal()">
+<span class="">Import</span>
+<span class="material-symbols-outlined text-[16px]">arrow_forward</span>
+</button>
+</div>
+<!-- Fresh Seedless Keypair Generator -->
+<div class="rounded-xl bg-surface-container p-unit-base shadow-sm space-y-unit-sm">
+<div class="flex items-start justify-between">
+<div class="flex items-center gap-unit-md">
+<div class="w-10 h-10 rounded-lg bg-surface-container-high flex items-center justify-center text-secondary">
+<span class="material-symbols-outlined text-[20px]">auto_awesome</span>
+</div>
+<div>
+<p class="font-headline-sm text-headline-sm text-on-surface">Create Fresh Keypair</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Instant uncompressed/compressed WIF generation</p>
+</div>
+</div>
+</div>
+
+<button class="w-full h-11 rounded-lg bg-surface-container-high hover:bg-surface-bright text-primary font-mono-sm text-mono-sm flex items-center justify-center gap-unit-xs transition-all active:scale-[0.99]" onclick="generateFreshKeypair()">
+<span class="material-symbols-outlined text-[18px]">add_circle</span>
+<span class="">Generate Disposable UTXO Pair</span>
+</button>
+</div>
+</div>
+</section>
+<!-- Network & Node Routing -->
+<section class="space-y-unit-sm">
+<div class="flex items-center justify-between px-unit-xs">
+<h3 class="font-label-caps text-label-caps text-on-surface-variant uppercase tracking-wider">Protocol &amp; Consensus Rules</h3>
+<span class="font-mono-sm text-mono-sm text-primary">v0.22.4</span>
+</div>
+<div class="rounded-xl bg-surface-container p-unit-base shadow-sm space-y-unit-base">
+<!-- Address Preference -->
+<div class="space-y-2">
+<label class="font-headline-sm text-headline-sm text-on-surface text-sm block">Default Payload Address Type</label>
+<div class="grid grid-cols-3 gap-2 bg-surface-container-lowest p-1 rounded-lg">
+<button class="addr-btn py-2 rounded font-mono-sm text-mono-sm bg-primary text-on-primary text-center font-medium transition-all shadow-sm" onclick="selectAddressType(this, 'Taproot')">
+            Taproot (P2TR)
+          </button>
+<button class="addr-btn py-2 rounded font-mono-sm text-mono-sm text-on-surface-variant hover:text-on-surface text-center font-medium transition-all" onclick="selectAddressType(this, 'SegWit')">
+            SegWit (P2WPKH)
+          </button>
+<button class="addr-btn py-2 rounded font-mono-sm text-mono-sm text-on-surface-variant hover:text-on-surface text-center font-medium transition-all flex items-center justify-center gap-1" onclick="selectAddressType(this, 'MWEB')">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary"></span>
+            MWEB Shield
+          </button>
+</div>
+</div>
+<!-- Node RPC Config -->
+<div class="space-y-2">
+<div class="flex items-center justify-between">
+<label class="font-headline-sm text-headline-sm text-on-surface text-sm">Electrum UTXO RPC Endpoint</label>
+<span class="font-mono-sm text-mono-sm text-secondary flex items-center gap-1">
+<span class="w-1.5 h-1.5 rounded-full bg-secondary"></span> Connected
+          </span>
+</div>
+<div class="flex items-center gap-2 bg-surface-container-lowest rounded-lg px-unit-md py-2.5">
+<span class="material-symbols-outlined text-[18px] text-on-surface-variant">dns</span>
+<input class="w-full bg-transparent font-mono-sm text-mono-sm text-on-surface focus:outline-none selection:bg-primary selection:text-on-primary" type="text" value="ssl://node.junkcoin.org:50002">
+<button aria-label="Refresh node ping" class="text-on-surface-variant hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-[18px]">sync</span>
+</button>
+</div>
+</div>
+<!-- RBF (Replace-By-Fee) -->
+<div class="flex items-center justify-between pt-2">
+<div class="space-y-0.5">
+<p class="font-headline-sm text-headline-sm text-on-surface text-sm">Replace-By-Fee (BIP125 RBF)</p>
+<p class="font-body-sm text-body-sm text-on-surface-variant">Allows fee bumping for stuck mempool TXs</p>
+</div>
+<button aria-checked="true" class="w-12 h-7 bg-primary rounded-full p-1 transition-colors relative flex items-center" onclick="toggleSwitch(this)" role="switch" type="button">
+<div class="w-5 h-5 bg-on-primary rounded-full transform translate-x-5 transition-transform"></div>
+</button>
+</div>
+</div>
+</section>
+<!-- Interactive Feedback Toast Placeholder -->
+<div class="fixed bottom-20 left-4 right-4 z-50 transform translate-y-32 opacity-0 transition-all duration-300 pointer-events-none" id="toast-banner">
+<div class="bg-surface-bright text-on-surface px-unit-base py-unit-sm rounded-lg shadow-xl flex items-center gap-unit-sm justify-between">
+<div class="flex items-center gap-unit-sm">
+<span class="material-symbols-outlined text-secondary text-[20px]" id="toast-icon">check_circle</span>
+<span class="font-mono-sm text-mono-sm" id="toast-msg">Key generated and copied to clipboard</span>
+</div>
+</div>
+</div>
+</div>
+<script>
+  function toggleSwitch(btn) {
+    const isChecked = btn.getAttribute('aria-checked') === 'true';
+    btn.setAttribute('aria-checked', !isChecked);
+    const circle = btn.querySelector('div');
+    if (isChecked) {
+      btn.classList.remove('bg-primary');
+      btn.classList.add('bg-surface-container-high');
+      circle.classList.remove('translate-x-5', 'bg-on-primary');
+      circle.classList.add('translate-x-0', 'bg-on-surface-variant');
+    } else {
+      btn.classList.add('bg-primary');
+      btn.classList.remove('bg-surface-container-high');
+      circle.classList.add('translate-x-5', 'bg-on-primary');
+      circle.classList.remove('translate-x-0', 'bg-on-surface-variant');
+    }
+  }
+
+  function showToast(msg, icon = 'check_circle') {
+    const toast = document.getElementById('toast-banner');
+    document.getElementById('toast-msg').innerText = msg;
+    document.getElementById('toast-icon').innerText = icon;
+    toast.classList.remove('translate-y-32', 'opacity-0');
+    toast.classList.add('translate-y-0', 'opacity-100');
+    setTimeout(() => {
+      toast.classList.add('translate-y-32', 'opacity-0');
+      toast.classList.remove('translate-y-0', 'opacity-100');
+    }, 2800);
+  }
+
+  function revealKey() {
+    const str = document.getElementById('pk-string');
+    const warning = document.getElementById('pk-warning');
+    const btn = document.getElementById('btn-reveal');
+    if (warning.classList.contains('hidden')) {
+      str.innerText = 'L53wQ9cR6vQ8GZTaMnmf68L4QY9W9j7d9mK9FzH3p7A9d9kP3';
+      str.classList.add('text-primary');
+      warning.classList.remove('hidden');
+      btn.innerHTML = '<span class="material-symbols-outlined text-[16px]">visibility_off</span><span>Hide</span>';
+    } else {
+      str.innerText = 'KxZ5vR89...••••••••••••••••...89AqP';
+      str.classList.remove('text-primary');
+      warning.classList.add('hidden');
+      btn.innerHTML = '<span class="material-symbols-outlined text-[16px]">visibility</span><span>Reveal</span>';
+    }
+  }
+
+  function copyKey() {
+    showToast('WIF Key safely copied to clipboard', 'content_copy');
+  }
+
+  function triggerImportModal() {
+    showToast('Scanner interface initialized', 'qr_code_scanner');
+  }
+
+  function generateFreshKeypair() {
+    showToast('Created compressed WIF: Ky9...6Fa', 'fingerprint');
+  }
+
+  function selectAddressType(btn, type) {
+    document.querySelectorAll('.addr-btn').forEach(b => {
+      b.classList.remove('bg-primary', 'text-on-primary', 'shadow-sm');
+      b.classList.add('text-on-surface-variant');
+    });
+    btn.classList.add('bg-primary', 'text-on-primary', 'shadow-sm');
+    btn.classList.remove('text-on-surface-variant');
+    showToast('Default set to ' + type, 'tune');
+  }
+</script></main><nav class="fixed bottom-0 w-full z-50 pb-safe bg-surface/85 backdrop-blur-xl shadow-[0_-4px_24px_rgba(0,0,0,0.4)]" data-active-classes="text-primary font-semibold"><div class="flex items-center justify-around h-16 px-unit-xs"><a class="flex flex-col items-center justify-center gap-0.5 w-16 h-12 text-on-surface-variant hover:text-on-surface transition-colors" data-path="wallet-dashboard" href="#"><span class="material-symbols-outlined text-[22px]">account_balance_wallet</span><span class="font-label-caps text-label-caps uppercase tracking-wider">Wallet</span></a><a class="flex flex-col items-center justify-center gap-0.5 w-16 h-12 text-on-surface-variant hover:text-on-surface transition-colors" data-path="send-transaction" href="#"><span class="material-symbols-outlined text-[22px]">send</span><span class="font-label-caps text-label-caps uppercase tracking-wider">Send</span></a><a class="flex flex-col items-center justify-center gap-0.5 w-16 h-12 text-on-surface-variant hover:text-on-surface transition-colors" data-path="transaction-history" href="#"><span class="material-symbols-outlined text-[22px]">history</span><span class="font-label-caps text-label-caps uppercase tracking-wider">History</span></a><a aria-current="page" class="flex flex-col items-center justify-center gap-0.5 w-16 h-12 transition-colors text-primary font-semibold" data-path="settings-security" href="#"><span class="material-symbols-outlined text-[22px]">security</span><span class="font-label-caps text-label-caps uppercase tracking-wider">Settings</span></a></div></nav>
+
+</body></html>
