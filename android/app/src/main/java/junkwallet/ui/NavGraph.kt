@@ -210,6 +210,11 @@ fun JunkWalletNavHost(
                     walletViewModel.switchNetwork(targetNetwork)
                 },
                 onAddressTypeChanged = { walletViewModel.setDefaultAddressType(it) },
+                onAccountSelected = { walletViewModel.switchAccount(it) },
+                onAccountRename = { id, name -> walletViewModel.renameAccount(id, name) },
+                onAccountCreate = { walletViewModel.createAccount(it) },
+                accounts = uiState.accounts,
+                activeAccountId = uiState.activeAccount?.id ?: "",
                 onTxClick = { txid ->
                     val tx = uiState.transactions.find { it.txid == txid }
                     if (tx != null) {

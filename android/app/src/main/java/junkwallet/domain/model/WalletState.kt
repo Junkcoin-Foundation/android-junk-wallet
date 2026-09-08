@@ -19,7 +19,9 @@ data class WalletState(
     val network: NetworkType = NetworkType.MAINNET,
     val isLoading: Boolean = false,
     val error: String? = null,
-    val lastSynced: Long = 0
+    val lastSynced: Long = 0,
+    val accounts: List<WalletAccount> = emptyList(),
+    val activeAccount: WalletAccount? = null
 ) {
     val totalBalance: Long get() = confirmedBalance + unconfirmedBalance
     val hasUnconfirmed: Boolean get() = unconfirmedBalance != 0L

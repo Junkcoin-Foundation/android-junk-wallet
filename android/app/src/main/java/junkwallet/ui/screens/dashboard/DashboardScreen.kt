@@ -53,13 +53,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import junkwallet.R
 import junkwallet.domain.model.AddressType
 import junkwallet.domain.model.FeeEstimates
 import junkwallet.domain.model.TransactionInfo
+import junkwallet.domain.model.WalletAccount
 import junkwallet.ui.theme.Background
 import junkwallet.ui.theme.NetworkMainnet
 import junkwallet.ui.theme.NetworkTestnet
@@ -86,6 +89,11 @@ fun DashboardScreen(
     onRefresh: () -> Unit = {},
     onNetworkToggle: () -> Unit = {},
     onAddressTypeChanged: (AddressType) -> Unit = {},
+    onAccountSelected: (String) -> Unit = {},
+    onAccountRename: (String, String) -> Unit = { _, _ -> },
+    onAccountCreate: (String) -> Unit = {},
+    accounts: List<junkwallet.domain.model.WalletAccount> = emptyList(),
+    activeAccountId: String = "",
     onTxClick: (String) -> Unit,
     confirmedBalance: Long = 0,
     unconfirmedBalance: Long = 0,
@@ -114,18 +122,73 @@ fun DashboardScreen(
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
-                            Icons.Filled.Wallet,
+                            painter = painterResource(id = R.drawable.ic_junkcoin_logo),
                             contentDescription = null,
-                            tint = PrimaryCyan,
-                            modifier = Modifier.size(22.dp)
+                            modifier = Modifier.size(24.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            "Junkcoin",
-                            style = MaterialTheme.typography.titleLarge,
-                            color = TextHighEmphasis,
-                            fontWeight = FontWeight.Bold
-                        )
+                        // Account dropdown
+                        var showAccountMenu by remember { mutableStateOf(false) }
+                        val activeAccount = accounts.find { it.id == activeAccountId }
+                        Box {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.clickable { showAccountMenu = true }
+                            ) {
+                                Text(
+                                    text = activeAccount?.name ?: "Account",
+                                    style = MaterialTheme.typography.titleLarge,
+                                    color = TextHighEmphasis,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Icon(
+                                    Icons.Filled.ArrowDropDown,
+                                    contentDescription = "Select account",
+                                    tint = TextMuted,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = showAccountMenu,
+                                onDismissRequest = { showAccountMenu = false }
+                            ) {
+                                accounts.forEach { account ->
+                                    DropdownMenuItem(
+                                        text = {
+                                            Column {
+                                                Text(
+                                                    text = account.name,
+                                                    fontWeight = if (account.id == activeAccountId) FontWeight.Bold else FontWeight.Normal
+                                                )
+                                                Text(
+                                                    text = account.defaultAddressType.name,
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = TextMuted
+                                                )
+                                            }
+                                        },
+                                        onClick = {
+                                            onAccountSelected(account.id)
+                                            showAccountMenu = false
+                                        }
+                                    )
+                                }
+                                HorizontalDivider()
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            text = "+ Add Account",
+                                            color = PrimaryCyan
+                                        )
+                                    },
+                                    onClick = {
+                                        showAccountMenu = false
+                                        onAccountCreate("Account ${accounts.size + 1}")
+                                    }
+                                )
+                            }
+                        }
                     }
                 },
                 actions = {

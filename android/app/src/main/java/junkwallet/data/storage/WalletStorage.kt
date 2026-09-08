@@ -20,6 +20,10 @@ import javax.crypto.spec.PBEKeySpec
 import javax.inject.Inject
 import javax.inject.Singleton
 import junkwallet.domain.model.AddressType
+import junkwallet.domain.model.NetworkType
+import junkwallet.domain.model.WalletAccount
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 
 @Singleton
 class WalletStorage @Inject constructor(
@@ -229,6 +233,92 @@ class WalletStorage @Inject constructor(
         sessionWif = null
     }
 
+    // ── Multi-Account Storage ──
+
+    private val json = Json { ignoreUnknownKeys = true }
+
+    fun getAccounts(): List<WalletAccount> {
+        val accountsJson = prefs.getString(KEY_ACCOUNTS_JSON, null) ?: return emptyList()
+        return try {
+            json.decodeFromString<List<WalletAccount>>(accountsJson)
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    fun saveAccounts(accounts: List<WalletAccount>) {
+        val accountsJson = json.encodeToString(accounts)
+        prefs.edit().putString(KEY_ACCOUNTS_JSON, accountsJson).apply()
+    }
+
+    fun getActiveAccountId(): String? {
+        return prefs.getString(KEY_ACTIVE_ACCOUNT_ID, null)
+    }
+
+    fun setActiveAccountId(accountId: String) {
+        prefs.edit().putString(KEY_ACTIVE_ACCOUNT_ID, accountId).apply()
+    }
+
+    fun getAccountWif(accountId: String, password: String): String? {
+        val key = "${KEY_ACCOUNT_ENCRYPTED_WIF_PREFIX}$accountId"
+        val encoded = prefs.getString(key, null) ?: return null
+        return try {
+            val combined = Base64.getDecoder().decode(encoded)
+            val salt = combined.copyOfRange(0, 16)
+            val iv = combined.copyOfRange(16, 28)
+            val ciphertext = combined.copyOfRange(28, combined.size)
+
+            val deriveKey = deriveKey(password, salt)
+            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+            cipher.init(Cipher.DECRYPT_MODE, deriveKey, GCMParameterSpec(128, iv))
+            val plaintext = cipher.doFinal(ciphertext)
+
+            String(plaintext, Charsets.UTF_8)
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    fun saveAccountEncryptedWif(accountId: String, wif: String, password: String) {
+        val salt = generateRandomBytes(16)
+        val iv = generateRandomBytes(12)
+        val key = deriveKey(password, salt)
+
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(Cipher.ENCRYPT_MODE, key, GCMParameterSpec(128, iv))
+        val ciphertext = cipher.doFinal(wif.toByteArray(Charsets.UTF_8))
+
+        val combined = salt + iv + ciphertext
+        val encoded = Base64.getEncoder().encodeToString(combined)
+        val storageKey = "${KEY_ACCOUNT_ENCRYPTED_WIF_PREFIX}$accountId"
+        prefs.edit().putString(storageKey, encoded).apply()
+    }
+
+    fun deleteAccountStorage(accountId: String) {
+        val storageKey = "${KEY_ACCOUNT_ENCRYPTED_WIF_PREFIX}$accountId"
+        prefs.edit().remove(storageKey).apply()
+    }
+
+    fun migrateSingleWalletToAccount() {
+        if (hasStoredWallet() && getAccounts().isEmpty()) {
+            val wif = sessionWif
+            if (wif != null) {
+                val network = when (getNetwork()) {
+                    "testnet" -> NetworkType.TESTNET
+                    else -> NetworkType.MAINNET
+                }
+                val account = WalletAccount(
+                    id = java.util.UUID.randomUUID().toString(),
+                    name = "Account 1",
+                    network = network,
+                    defaultAddressType = getDefaultAddressType()
+                )
+                saveAccounts(listOf(account))
+                setActiveAccountId(account.id)
+            }
+        }
+    }
+
     // ── Crypto Helpers ──
 
     private fun deriveKey(password: String, salt: ByteArray): SecretKey {
@@ -252,6 +342,9 @@ class WalletStorage @Inject constructor(
         private const val KEY_NETWORK = "network_type"
         private const val KEY_DEFAULT_ADDRESS_TYPE = "default_address_type"
         private const val PBKDF2_ITERATIONS = 600_000  // OWASP 2023 recommendation
+        private const val KEY_ACCOUNTS_JSON = "accounts_json"
+        private const val KEY_ACTIVE_ACCOUNT_ID = "active_account_id"
+        private const val KEY_ACCOUNT_ENCRYPTED_WIF_PREFIX = "account_"
 
         const val NETWORK_MAINNET = "mainnet"
         const val NETWORK_TESTNET = "testnet"

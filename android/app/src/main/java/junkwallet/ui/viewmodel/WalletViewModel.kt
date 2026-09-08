@@ -17,6 +17,7 @@ import junkwallet.domain.model.AddressType
 import junkwallet.domain.model.FiatPrice
 import android.util.Log
 import junkwallet.domain.model.NetworkType
+import junkwallet.domain.model.WalletAccount
 import junkwallet.domain.model.WalletState
 import junkwallet.domain.usecase.GetPriceUseCase
 import junkwallet.domain.usecase.SyncWalletUseCase
@@ -55,6 +56,13 @@ class WalletViewModel @Inject constructor(
 
     private fun loadWallet() {
         try {
+            // Migrate single wallet to account if needed
+            storage.migrateSingleWalletToAccount()
+
+            val accounts = storage.getAccounts()
+            val activeAccountId = storage.getActiveAccountId()
+            val activeAccount = accounts.find { it.id == activeAccountId }
+
             val address = storage.getAddress() ?: return
             val network = when (storage.getNetwork()) {
                 "testnet" -> NetworkType.TESTNET
@@ -67,7 +75,9 @@ class WalletViewModel @Inject constructor(
                     isLocked = false,
                     address = address,
                     network = network,
-                    isLoading = true
+                    isLoading = true,
+                    accounts = accounts,
+                    activeAccount = activeAccount
                 )
             }
 
@@ -476,6 +486,144 @@ class WalletViewModel @Inject constructor(
             String.format("$%.4f", usd)
         } else {
             "$0.00"
+        }
+    }
+
+    // ── Account Management ──
+
+    /**
+     * Switch to a different account.
+     */
+    fun switchAccount(accountId: String) {
+        val account = _uiState.value.accounts.find { it.id == accountId } ?: return
+
+        storage.setActiveAccountId(accountId)
+        storage.saveNetwork(if (account.network == NetworkType.TESTNET) WalletStorage.NETWORK_TESTNET else WalletStorage.NETWORK_MAINNET)
+        storage.saveDefaultAddressType(account.defaultAddressType.name)
+
+        syncJob?.cancel()
+        _uiState.update {
+            it.copy(
+                activeAccount = account,
+                network = account.network,
+                isLoading = true,
+                confirmedBalance = 0,
+                unconfirmedBalance = 0,
+                transactions = emptyList(),
+                utxos = emptyList(),
+                blockHeight = 0,
+                feeEstimates = junkwallet.domain.model.FeeEstimates(),
+                error = null
+            )
+        }
+
+        // Regenerate address for new account's network and type
+        val wif = storage.getSessionWif()
+        if (wif != null) {
+            val newAddress = regenerateAddressForNetwork(wif, account.network)
+            if (newAddress != null) {
+                storage.saveAddress(newAddress)
+                _uiState.update { it.copy(address = newAddress) }
+                generateAllAddresses()
+                syncWallet()
+                startBackgroundSync()
+            }
+        }
+    }
+
+    /**
+     * Create a new account with a fresh WIF.
+     */
+    fun createAccount(name: String) {
+        viewModelScope.launch {
+            try {
+                // Generate new key pair
+                val networkParams = when (_uiState.value.network) {
+                    NetworkType.MAINNET -> junkwallet.domain.model.JunkcoinNetwork.MAINNET
+                    NetworkType.TESTNET -> junkwallet.domain.model.JunkcoinNetwork.TESTNET
+                }
+                val keyPair = crypto.generateWallet()
+                val privateKeyBytes = crypto.getPrivateKeyBytes(keyPair.private)
+                val wif = crypto.privateKeyToWif(privateKeyBytes, networkParams)
+
+                val existingAccounts = storage.getAccounts()
+                if (existingAccounts.isNotEmpty()) {
+                    val account = WalletAccount(
+                        id = java.util.UUID.randomUUID().toString(),
+                        name = name,
+                        network = _uiState.value.network,
+                        defaultAddressType = _defaultAddressType.value
+                    )
+
+                    val updatedAccounts = existingAccounts + account
+                    storage.saveAccounts(updatedAccounts)
+                    storage.setActiveAccountId(account.id)
+
+                    _uiState.update {
+                        it.copy(
+                            accounts = updatedAccounts,
+                            activeAccount = account
+                        )
+                    }
+
+                    // Switch to the new account
+                    switchAccount(account.id)
+                }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(error = "Failed to create account: ${e.message}")
+                }
+            }
+        }
+    }
+
+    /**
+     * Rename an account.
+     */
+    fun renameAccount(accountId: String, newName: String) {
+        val accounts = _uiState.value.accounts.map { account ->
+            if (account.id == accountId) account.copy(name = newName) else account
+        }
+        storage.saveAccounts(accounts)
+
+        val activeAccount = if (_uiState.value.activeAccount?.id == accountId) {
+            accounts.find { it.id == accountId }
+        } else {
+            _uiState.value.activeAccount
+        }
+
+        _uiState.update {
+            it.copy(
+                accounts = accounts,
+                activeAccount = activeAccount
+            )
+        }
+    }
+
+    /**
+     * Delete an account.
+     */
+    fun deleteAccount(accountId: String) {
+        val accounts = _uiState.value.accounts.filter { it.id != accountId }
+        storage.saveAccounts(accounts)
+        storage.deleteAccountStorage(accountId)
+
+        if (_uiState.value.activeAccount?.id == accountId) {
+            val newActive = accounts.firstOrNull()
+            if (newActive != null) {
+                switchAccount(newActive.id)
+            } else {
+                _uiState.update {
+                    it.copy(
+                        accounts = emptyList(),
+                        activeAccount = null,
+                        hasStoredWallet = false,
+                        isLocked = true
+                    )
+                }
+            }
+        } else {
+            _uiState.update { it.copy(accounts = accounts) }
         }
     }
 
