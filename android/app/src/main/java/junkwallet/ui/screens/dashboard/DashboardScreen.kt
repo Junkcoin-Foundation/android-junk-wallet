@@ -90,6 +90,7 @@ fun DashboardScreen(
     confirmedBalance: Long = 0,
     unconfirmedBalance: Long = 0,
     address: String = "",
+    allAddresses: Map<String, String> = emptyMap(),
     blockHeight: Int = 0,
     networkName: String = "Mainnet",
     defaultAddressType: AddressType = AddressType.P2PKH,
@@ -205,6 +206,7 @@ fun DashboardScreen(
                     confirmedBalance = confirmedBalance,
                     unconfirmedBalance = unconfirmedBalance,
                     address = address,
+                    allAddresses = allAddresses,
                     fiatPriceUsd = fiatPriceUsd,
                     defaultAddressType = defaultAddressType,
                     onCopyAddress = { clipboard.setText(AnnotatedString(address)) },
@@ -377,25 +379,13 @@ private fun BalanceCard(
     confirmedBalance: Long,
     unconfirmedBalance: Long,
     address: String,
+    allAddresses: Map<String, String> = emptyMap(),
     fiatPriceUsd: Double,
     defaultAddressType: AddressType = AddressType.P2PKH,
     onCopyAddress: () -> Unit,
     onAddressTypeChanged: (AddressType) -> Unit = {}
 ) {
     var showTypeDropdown by remember { mutableStateOf(false) }
-
-    val typeLabel = when (defaultAddressType) {
-        AddressType.P2PKH -> "Legacy"
-        AddressType.P2SH_P2WPKH -> "Wrapped SegWit"
-        AddressType.P2WPKH -> "Native SegWit"
-        AddressType.P2TR -> "Taproot"
-    }
-    val typeShort = when (defaultAddressType) {
-        AddressType.P2PKH -> "P2PKH"
-        AddressType.P2SH_P2WPKH -> "P2SH"
-        AddressType.P2WPKH -> "P2WPKH"
-        AddressType.P2TR -> "P2TR"
-    }
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -459,7 +449,7 @@ private fun BalanceCard(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Wallet type dropdown
+            // Address row with dropdown + copy
             Box(modifier = Modifier.fillMaxWidth()) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -470,31 +460,26 @@ private fun BalanceCard(
                         .clickable { showTypeDropdown = true }
                         .padding(horizontal = 12.dp, vertical = 10.dp)
                 ) {
-                    Icon(
-                        Icons.Filled.Wallet,
-                        contentDescription = null,
-                        tint = PrimaryCyan,
-                        modifier = Modifier.size(14.dp)
+                    Text(
+                        text = address.ifEmpty { "—" },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextMuted,
+                        fontFamily = FontFamily.Monospace,
+                        modifier = Modifier.weight(1f)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Wallet Type",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = TextMuted
-                        )
-                        Text(
-                            text = "$typeLabel ($typeShort)",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = TextHighEmphasis,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
                     Icon(
                         Icons.Filled.ArrowDropDown,
-                        contentDescription = "Change type",
+                        contentDescription = "Change address type",
                         tint = TextMuted,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Icon(
+                        Icons.Filled.ContentCopy, "Copy Address",
+                        tint = PrimaryCyan,
+                        modifier = Modifier.size(14.dp)
+                            .clickable(onClick = onCopyAddress)
                     )
                 }
 
@@ -502,19 +487,17 @@ private fun BalanceCard(
                     expanded = showTypeDropdown,
                     onDismissRequest = { showTypeDropdown = false }
                 ) {
-                    AddressType.entries.forEach { type ->
-                        val label = when (type) {
-                            AddressType.P2PKH -> "Legacy (P2PKH)"
-                            AddressType.P2SH_P2WPKH -> "Wrapped SegWit (P2SH)"
-                            AddressType.P2WPKH -> "Native SegWit (P2WPKH)"
-                            AddressType.P2TR -> "Taproot (P2TR)"
-                        }
+                    allAddresses.forEach { (typeKey, addr) ->
+                        val type = try { AddressType.valueOf(typeKey) } catch (_: Exception) { null } ?: return@forEach
                         DropdownMenuItem(
                             text = {
                                 Text(
-                                    text = label,
+                                    text = addr,
                                     color = if (type == defaultAddressType) PrimaryCyan else TextHighEmphasis,
-                                    fontWeight = if (type == defaultAddressType) FontWeight.Bold else FontWeight.Normal
+                                    fontFamily = FontFamily.Monospace,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = if (type == defaultAddressType) FontWeight.Bold else FontWeight.Normal,
+                                    maxLines = 1
                                 )
                             },
                             onClick = {
@@ -524,33 +507,6 @@ private fun BalanceCard(
                         )
                     }
                 }
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Address row with copy
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(MaterialTheme.shapes.small)
-                    .background(SurfaceContainerHigh)
-                    .clickable(onClick = onCopyAddress)
-                    .padding(horizontal = 12.dp, vertical = 10.dp)
-            ) {
-                Text(
-                    text = address.ifEmpty { "—" },
-                    style = MaterialTheme.typography.labelSmall,
-                    color = TextMuted,
-                    fontFamily = FontFamily.Monospace,
-                    modifier = Modifier.weight(1f)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Icon(
-                    Icons.Filled.ContentCopy, "Copy Address",
-                    tint = PrimaryCyan,
-                    modifier = Modifier.size(14.dp)
-                )
             }
         }
     }

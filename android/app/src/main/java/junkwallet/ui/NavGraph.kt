@@ -202,6 +202,7 @@ fun JunkWalletNavHost(
                 confirmedBalance = uiState.confirmedBalance,
                 unconfirmedBalance = uiState.unconfirmedBalance,
                 address = uiState.address,
+                allAddresses = uiState.allAddresses,
                 blockHeight = uiState.blockHeight,
                 networkName = when (uiState.network) {
                     junkwallet.domain.model.NetworkType.MAINNET -> "Mainnet"

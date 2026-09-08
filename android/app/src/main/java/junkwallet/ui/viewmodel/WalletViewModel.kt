@@ -73,6 +73,7 @@ class WalletViewModel @Inject constructor(
 
             syncWallet()
             startBackgroundSync()
+            generateAllAddresses()
         } catch (e: Exception) {
             _uiState.update {
                 it.copy(
@@ -268,6 +269,7 @@ class WalletViewModel @Inject constructor(
                         address = newAddress
                     )
                 }
+                generateAllAddresses()
 
                 // Clear cache for old address on old network
                 viewModelScope.launch {
@@ -413,6 +415,35 @@ class WalletViewModel @Inject constructor(
         } catch (e: Exception) {
             null
         }
+    }
+
+    /**
+     * Generate addresses for all supported types and cache them.
+     */
+    fun generateAllAddresses() {
+        val wif = storage.getSessionWif() ?: return
+        val networkParams = when (_uiState.value.network) {
+            NetworkType.MAINNET -> junkwallet.domain.model.JunkcoinNetwork.MAINNET
+            NetworkType.TESTNET -> junkwallet.domain.model.JunkcoinNetwork.TESTNET
+        }
+        try {
+            val keyPair = crypto.getKeyPairFromWif(wif)
+            val compressedPubKey = crypto.getCompressedPublicKey(keyPair.public)
+            val addresses = mutableMapOf<String, String>()
+            for (type in networkParams.supportedAddressTypes) {
+                val addr = when (type) {
+                    AddressType.P2PKH -> crypto.createP2PKHAddress(compressedPubKey, networkParams)
+                    AddressType.P2SH_P2WPKH -> crypto.createP2SH_P2WPKHAddress(compressedPubKey, networkParams)
+                    AddressType.P2WPKH -> crypto.createP2WPKHAddress(compressedPubKey, networkParams)
+                    AddressType.P2TR -> {
+                        val privateKeyBytes = crypto.getPrivateKeyBytes(keyPair.private)
+                        crypto.createP2TRAddressWithKey(privateKeyBytes, networkParams)
+                    }
+                }
+                addresses[type.name] = addr
+            }
+            _uiState.update { it.copy(allAddresses = addresses) }
+        } catch (_: Exception) { }
     }
 
     /**

@@ -9,6 +9,7 @@ data class WalletState(
     val hasStoredWallet: Boolean = false,
     val isLocked: Boolean = true,
     val address: String = "",
+    val allAddresses: Map<String, String> = emptyMap(),
     val confirmedBalance: Long = 0,
     val unconfirmedBalance: Long = 0,
     val transactions: List<TransactionInfo> = emptyList(),
