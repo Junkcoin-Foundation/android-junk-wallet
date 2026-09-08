@@ -5,7 +5,7 @@ import kotlinx.serialization.Serializable
 /**
  * Address type enumeration for Junkcoin.
  * P2PKH: Legacy address (starts with '7' mainnet, 'm'/'n' testnet)
- * P2SH-P2WPKH: SegWit wrapped in P2SH (starts with '3' mainnet, '2' testnet)
+ * P2SH-P2WPKH: SegWit wrapped in P2SH (starts with '3' on both networks)
  * P2WPKH: Native SegWit (bech32, starts with 'jc1...' mainnet, 'tjc1...' testnet)
  * P2TR: Taproot (bech32m, starts with 'jc1p...' mainnet, 'tjc1p...' testnet)
  */
@@ -62,11 +62,11 @@ data class JunkcoinParams(
 
     /**
      * Get the P2SH prefix for wrapped SegWit.
+     * Junkcoin uses 0x05 for both mainnet and testnet (prefix '3').
      */
     val p2shPrefix: String
         get() = when (scriptHash) {
-            0x05 -> "3"    // mainnet
-            0xC4 -> "2"    // testnet
+            0x05 -> "3"    // mainnet + testnet (Junkcoin uses same prefix)
             else -> "3"
         }
 
@@ -118,15 +118,14 @@ object JunkcoinNetwork {
             "jkc-seed.junkiewally.xyz"
         ),
         electrsUrl = "https://junk-api.s3na.xyz",
-        explorerUrl = "https://explorer.junk-coin.com",
-        segwitActivatedAt = 140000,   // SegWit activated at block 140,000
-        taprootActivatedAt = 160000    // Taproot activated at block 160,000
+        explorerUrl = "https://explorer.junk-coin.com"
+        // SegWit/Taproot disabled on mainnet (node doesn't support them yet)
     )
 
     val TESTNET = JunkcoinParams(
         name = "testnet",
         pubKeyHash = 0x6F,
-        scriptHash = 0xC4,
+        scriptHash = 0x05,  // Same as mainnet (Junkcoin uses '3' prefix for both)
         wif = 0xEF,
         bech32Hrp = "tjc",
         messagePrefix = "\u0019Junkcoin Signed Message:\n",
