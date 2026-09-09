@@ -72,23 +72,40 @@ class WalletStorage @Inject constructor(
     /**
      * Decrypt stored WIF using user's password.
      * Returns null if decryption fails (wrong password).
+     * Supports backward compatibility with old iteration counts (100K, 210K).
      */
     fun getDecryptedWif(password: String): String? {
         val encoded = prefs.getString(KEY_ENCRYPTED_WIF, null) ?: return null
+        // Try current iteration count first, then fall back to old counts for backward compatibility
+        val iterationCounts = listOf(PBKDF2_ITERATIONS, PBKDF2_ITERATIONS_V1, PBKDF2_ITERATIONS_V2)
+        for (iterations in iterationCounts) {
+            val result = tryDecryptWif(password, encoded, iterations)
+            if (result != null) {
+                // If we decrypted with old iterations, re-encrypt with new iterations
+                if (iterations != PBKDF2_ITERATIONS) {
+                    saveEncryptedWif(result, password)
+                }
+                return result
+            }
+        }
+        return null
+    }
+
+    private fun tryDecryptWif(password: String, encoded: String, iterations: Int): String? {
         return try {
             val combined = Base64.getDecoder().decode(encoded)
             val salt = combined.copyOfRange(0, 16)
             val iv = combined.copyOfRange(16, 28)
             val ciphertext = combined.copyOfRange(28, combined.size)
 
-            val key = deriveKey(password, salt)
+            val key = deriveKeyWithIterations(password, salt, iterations)
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
             cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(128, iv))
             val plaintext = cipher.doFinal(ciphertext)
 
             String(plaintext, Charsets.UTF_8)
         } catch (e: Exception) {
-            null // Wrong password or corrupted data
+            null
         }
     }
 
@@ -206,16 +223,33 @@ class WalletStorage @Inject constructor(
 
     /**
      * Decrypt WIF using PIN.
+     * Supports backward compatibility with old iteration counts.
      */
     fun getDecryptedWifByPin(pin: String): String? {
         val encoded = prefs.getString(KEY_PIN_ENCRYPTED_WIF, null) ?: return null
+        // Try current iteration count first, then fall back to old counts for backward compatibility
+        val iterationCounts = listOf(PBKDF2_ITERATIONS, PBKDF2_ITERATIONS_V1, PBKDF2_ITERATIONS_V2)
+        for (iterations in iterationCounts) {
+            val result = tryDecryptWifByPin(pin, encoded, iterations)
+            if (result != null) {
+                // If we decrypted with old iterations, re-encrypt with new iterations
+                if (iterations != PBKDF2_ITERATIONS) {
+                    savePinEncryptedWif(result, pin)
+                }
+                return result
+            }
+        }
+        return null
+    }
+
+    private fun tryDecryptWifByPin(pin: String, encoded: String, iterations: Int): String? {
         return try {
             val combined = Base64.getDecoder().decode(encoded)
             val salt = combined.copyOfRange(0, 16)
             val iv = combined.copyOfRange(16, 28)
             val ciphertext = combined.copyOfRange(28, combined.size)
 
-            val key = deriveKey(pin, salt)
+            val key = deriveKeyWithIterations(pin, salt, iterations)
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
             cipher.init(Cipher.DECRYPT_MODE, key, GCMParameterSpec(128, iv))
             val plaintext = cipher.doFinal(ciphertext)
@@ -322,8 +356,12 @@ class WalletStorage @Inject constructor(
     // ── Crypto Helpers ──
 
     private fun deriveKey(password: String, salt: ByteArray): SecretKey {
+        return deriveKeyWithIterations(password, salt, PBKDF2_ITERATIONS)
+    }
+
+    private fun deriveKeyWithIterations(password: String, salt: ByteArray, iterations: Int): SecretKey {
         val factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
-        val spec = PBEKeySpec(password.toCharArray(), salt, PBKDF2_ITERATIONS, 256)
+        val spec = PBEKeySpec(password.toCharArray(), salt, iterations, 256)
         val tmp = factory.generateSecret(spec)
         return SecretKeySpec(tmp.encoded, "AES")
     }
@@ -341,7 +379,9 @@ class WalletStorage @Inject constructor(
         private const val KEY_ADDRESS = "wallet_address"
         private const val KEY_NETWORK = "network_type"
         private const val KEY_DEFAULT_ADDRESS_TYPE = "default_address_type"
-        private const val PBKDF2_ITERATIONS = 600_000  // OWASP 2023 recommendation
+        private const val PBKDF2_ITERATIONS = 600_000      // Current (OWASP 2023)
+        private const val PBKDF2_ITERATIONS_V1 = 100_000   // Old v1 (pre-PIN)
+        private const val PBKDF2_ITERATIONS_V2 = 210_000   // Old v2 (post-PIN, pre-600K)
         private const val KEY_ACCOUNTS_JSON = "accounts_json"
         private const val KEY_ACTIVE_ACCOUNT_ID = "active_account_id"
         private const val KEY_ACCOUNT_ENCRYPTED_WIF_PREFIX = "account_"
