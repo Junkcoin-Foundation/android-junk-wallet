@@ -47,3 +47,4 @@ google-services.json
 android/app/build/
 android/build/
 android/.gradle/
+android/.kotlin/
