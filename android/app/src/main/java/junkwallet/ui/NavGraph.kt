@@ -361,7 +361,8 @@ fun JunkWalletNavHost(
                 onPinRemove = { walletStorage.clearPin() },
                 onChangePassword = { currentPassword, newPassword ->
                     walletViewModel.changePassword(currentPassword, newPassword)
-                }
+                },
+                versionName = junkwallet.BuildConfig.VERSION_NAME
             )
         }
 

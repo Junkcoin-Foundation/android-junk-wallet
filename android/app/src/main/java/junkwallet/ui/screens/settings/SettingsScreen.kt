@@ -80,7 +80,8 @@ fun SettingsScreen(
     hasPin: Boolean = false,
     onPinSetup: (String) -> Unit = {},
     onPinRemove: () -> Unit = {},
-    onChangePassword: (currentPassword: String, newPassword: String) -> Boolean = { _, _ -> false }
+    onChangePassword: (currentPassword: String, newPassword: String) -> Boolean = { _, _ -> false },
+    versionName: String = "1.0.0"
 ) {
     var showNetworkMenu by remember { mutableStateOf(false) }
     var showAddressTypeMenu by remember { mutableStateOf(false) }
@@ -397,7 +398,7 @@ fun SettingsScreen(
                     Row(modifier = Modifier.fillMaxWidth()) {
                         Text("Version", style = MaterialTheme.typography.bodyMedium, color = TextMuted)
                         Spacer(modifier = Modifier.weight(1f))
-                        Text("1.0.0", style = MaterialTheme.typography.bodyMedium, color = TextHighEmphasis)
+                        Text(versionName, style = MaterialTheme.typography.bodyMedium, color = TextHighEmphasis)
                     }
                     Spacer(modifier = Modifier.height(8.dp))
                     Row(modifier = Modifier.fillMaxWidth()) {
