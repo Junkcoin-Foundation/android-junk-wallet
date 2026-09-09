@@ -627,6 +627,16 @@ class WalletViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Change wallet password.
+     * Re-encrypts the WIF with the new password.
+     */
+    fun changePassword(currentPassword: String, newPassword: String): Boolean {
+        val wif = storage.getDecryptedWif(currentPassword) ?: return false
+        storage.saveEncryptedWif(wif, newPassword)
+        return true
+    }
+
     override fun onCleared() {
         super.onCleared()
         syncJob?.cancel()

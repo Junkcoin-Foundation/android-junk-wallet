@@ -79,12 +79,24 @@ fun SettingsScreen(
     onBiometricChanged: (Boolean) -> Unit = {},
     hasPin: Boolean = false,
     onPinSetup: (String) -> Unit = {},
-    onPinRemove: () -> Unit = {}
+    onPinRemove: () -> Unit = {},
+    onChangePassword: (currentPassword: String, newPassword: String) -> Boolean = { _, _ -> false }
 ) {
     var showNetworkMenu by remember { mutableStateOf(false) }
     var showAddressTypeMenu by remember { mutableStateOf(false) }
     var showPinDialog by remember { mutableStateOf(false) }
+    var showChangePasswordDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
+
+    if (showChangePasswordDialog) {
+        ChangePasswordDialog(
+            onDismiss = { showChangePasswordDialog = false },
+            onPasswordChanged = {
+                showChangePasswordDialog = false
+            },
+            onChangePassword = onChangePassword
+        )
+    }
 
     if (showPinDialog) {
         PinSetupDialog(
@@ -142,12 +154,25 @@ fun SettingsScreen(
                         onCheckedChange = onBiometricChanged
                     )
 
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
+                    // Change Password
+                    SettingClickable(
+                        title = "Change Password",
+                        subtitle = "Change your wallet password",
+                        onClick = { showChangePasswordDialog = true }
+                    )
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
                     // PIN Lock
                     SettingClickable(
                         title = "PIN Lock",
                         subtitle = if (hasPin) "Change or remove PIN" else "Set up PIN for quick unlock",
                         onClick = { showPinDialog = true }
                     )
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
                     // Key Vault
                     SettingClickable(
@@ -610,6 +635,143 @@ private fun PinSetupDialog(
                                 confirmPin = ""
                             } else {
                                 onPinSet(pin)
+                            }
+                        }
+                    }
+                ) {
+                    Text("OK", color = PrimaryCyan)
+                }
+            }
+        },
+        dismissButton = null
+    )
+}
+
+@Composable
+private fun ChangePasswordDialog(
+    onDismiss: () -> Unit,
+    onPasswordChanged: () -> Unit,
+    onChangePassword: (currentPassword: String, newPassword: String) -> Boolean = { _, _ -> false }
+) {
+    var currentPassword by remember { mutableStateOf("") }
+    var newPassword by remember { mutableStateOf("") }
+    var confirmPassword by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
+    var step by remember { mutableIntStateOf(0) } // 0 = current password, 1 = new password, 2 = confirm
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = SurfaceContainer,
+        title = {
+            Text(
+                text = when (step) {
+                    0 -> "Enter Current Password"
+                    1 -> "Enter New Password"
+                    else -> "Confirm New Password"
+                },
+                color = TextHighEmphasis
+            )
+        },
+        text = {
+            Column {
+                Text(
+                    text = when (step) {
+                        0 -> "Enter your current password"
+                        1 -> "Enter a new password (min 8 characters)"
+                        else -> "Confirm your new password"
+                    },
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TextMuted
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                OutlinedTextField(
+                    value = when (step) {
+                        0 -> currentPassword
+                        1 -> newPassword
+                        else -> confirmPassword
+                    },
+                    onValueChange = { value ->
+                        when (step) {
+                            0 -> currentPassword = value
+                            1 -> newPassword = value
+                            else -> confirmPassword = value
+                        }
+                        error = null
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    visualTransformation = PasswordVisualTransformation(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = PrimaryCyan,
+                        unfocusedBorderColor = SurfaceContainerHigh
+                    ),
+                    shape = MaterialTheme.shapes.medium,
+                    singleLine = true,
+                    isError = error != null,
+                    placeholder = {
+                        Text(
+                            when (step) {
+                                0 -> "Enter current password"
+                                1 -> "Enter new password"
+                                else -> "Confirm new password"
+                            },
+                            color = TextMuted
+                        )
+                    }
+                )
+
+                if (error != null) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = error!!,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = ErrorCrimson
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Row {
+                Spacer(modifier = Modifier.weight(1f))
+                TextButton(onClick = onDismiss) {
+                    Text("Cancel", color = TextMuted)
+                }
+                TextButton(
+                    onClick = {
+                        when (step) {
+                            0 -> {
+                                if (currentPassword.isBlank()) {
+                                    error = "Please enter current password"
+                                } else {
+                                    step = 1
+                                }
+                            }
+                            1 -> {
+                                if (newPassword.length < 8) {
+                                    error = "Password must be at least 8 characters"
+                                } else {
+                                    step = 2
+                                }
+                            }
+                            2 -> {
+                                if (newPassword != confirmPassword) {
+                                    error = "Passwords do not match"
+                                    step = 1
+                                    newPassword = ""
+                                    confirmPassword = ""
+                                } else {
+                                    val success = onChangePassword(currentPassword, newPassword)
+                                    if (success) {
+                                        onPasswordChanged()
+                                    } else {
+                                        error = "Current password is incorrect"
+                                        step = 0
+                                        currentPassword = ""
+                                        newPassword = ""
+                                        confirmPassword = ""
+                                    }
+                                }
                             }
                         }
                     }

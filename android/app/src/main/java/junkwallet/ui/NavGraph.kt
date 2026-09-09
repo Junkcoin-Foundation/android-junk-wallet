@@ -358,7 +358,10 @@ fun JunkWalletNavHost(
                         walletStorage.savePinEncryptedWif(wif, pin)
                     }
                 },
-                onPinRemove = { walletStorage.clearPin() }
+                onPinRemove = { walletStorage.clearPin() },
+                onChangePassword = { currentPassword, newPassword ->
+                    walletViewModel.changePassword(currentPassword, newPassword)
+                }
             )
         }
 
