@@ -207,6 +207,7 @@ fun SettingsScreen(
                                         AddressType.P2SH_P2WPKH -> "Wrapped SegWit"
                                         AddressType.P2WPKH -> "Native SegWit"
                                         AddressType.P2TR -> "Taproot"
+                                        AddressType.MWEB -> "MimbleWimble"
                                     },
                                     style = MaterialTheme.typography.labelLarge,
                                     color = when (defaultAddressType) {
@@ -214,6 +215,7 @@ fun SettingsScreen(
                                         AddressType.P2SH_P2WPKH -> SecondaryEmerald
                                         AddressType.P2WPKH -> PrimaryCyan
                                         AddressType.P2TR -> MaterialTheme.colorScheme.tertiary
+                                        AddressType.MWEB -> MaterialTheme.colorScheme.tertiary
                                     }
                                 )
                             },

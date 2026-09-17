@@ -428,6 +428,9 @@ class JunkcoinCrypto @Inject constructor(
                 System.arraycopy(program, 0, script, 2, 32)
                 script
             }
+            junkwallet.domain.model.AddressType.MWEB -> {
+                throw IllegalArgumentException("MWEB locking scripts not yet supported")
+            }
         }
     }
 
@@ -471,6 +474,9 @@ class JunkcoinCrypto @Inject constructor(
             junkwallet.domain.model.AddressType.P2TR -> {
                 bech32Encoder.getWitnessProgram(address)
                     ?: throw IllegalArgumentException("Invalid witness address")
+            }
+            junkwallet.domain.model.AddressType.MWEB -> {
+                throw IllegalArgumentException("MWEB address hash not yet supported")
             }
         }
     }

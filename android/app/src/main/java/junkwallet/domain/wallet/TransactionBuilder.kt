@@ -157,6 +157,9 @@ class TransactionBuilder @Inject constructor(
                     val scriptSig = byteArrayOf(redeemScript.size.toByte()) + redeemScript
                     input.copy(scriptSig = scriptSig, witness = listOf(signature, compressedPubKey))
                 }
+                AddressType.MWEB -> {
+                    throw UnsupportedOperationException("MWEB transaction signing not yet supported")
+                }
             }
         }
         return transaction.copy(inputs = signedInputs)
@@ -169,6 +172,7 @@ class TransactionBuilder @Inject constructor(
             AddressType.P2TR -> size += inputCount * 65
             AddressType.P2SH_P2WPKH -> size += inputCount * 91
             AddressType.P2PKH -> size += inputCount * 107
+            AddressType.MWEB -> {}
         }
         return size * feePerByte
     }

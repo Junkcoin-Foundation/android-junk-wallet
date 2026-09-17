@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import junkwallet.data.repository.BlockchainRepository
+import junkwallet.data.repository.MwebRepository
 import junkwallet.data.repository.PriceRepository
 import junkwallet.data.storage.WalletStorage
 import junkwallet.domain.model.AddressType
@@ -30,7 +31,8 @@ class WalletViewModel @Inject constructor(
     private val getPriceUseCase: GetPriceUseCase,
     private val storage: WalletStorage,
     private val priceRepository: PriceRepository,
-    private val crypto: JunkcoinCrypto
+    private val crypto: JunkcoinCrypto,
+    private val mwebRepository: MwebRepository
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(WalletState())
@@ -45,6 +47,16 @@ class WalletViewModel @Inject constructor(
     private val _generatedAddresses = MutableStateFlow<Map<AddressType, String>>(emptyMap())
     val generatedAddresses: StateFlow<Map<AddressType, String>> = _generatedAddresses.asStateFlow()
 
+    // MWEB state
+    private val _mwebBalance = MutableStateFlow(0L)
+    val mwebBalance: StateFlow<Long> = _mwebBalance.asStateFlow()
+
+    private val _mwebAddresses = MutableStateFlow<List<String>>(emptyList())
+    val mwebAddresses: StateFlow<List<String>> = _mwebAddresses.asStateFlow()
+
+    private val _isMwebRunning = MutableStateFlow(false)
+    val isMwebRunning: StateFlow<Boolean> = _isMwebRunning.asStateFlow()
+
     private var syncJob: Job? = null
     private val syncIntervalMs = 45_000L // 45 seconds
 
@@ -52,6 +64,7 @@ class WalletViewModel @Inject constructor(
         loadWallet()
         loadPrice()
         loadDefaultAddressType()
+        startMwebDaemon()
     }
 
     private fun loadWallet() {
@@ -338,6 +351,11 @@ class WalletViewModel @Inject constructor(
                     val privateKeyBytes = crypto.getPrivateKeyBytes(keyPair.private)
                     crypto.createP2TRAddressWithKey(privateKeyBytes, networkParams)
                 }
+                AddressType.MWEB -> {
+                    // MWEB addresses require mwebd - return placeholder
+                    // TODO: Generate MWEB address via mwebd
+                    "jcmweb1..."
+                }
             }
         } catch (e: Exception) {
             null
@@ -421,6 +439,11 @@ class WalletViewModel @Inject constructor(
                     val privateKeyBytes = crypto.getPrivateKeyBytes(keyPair.private)
                     crypto.createP2TRAddressWithKey(privateKeyBytes, networkParams)
                 }
+                AddressType.MWEB -> {
+                    // MWEB addresses require mwebd - return placeholder
+                    // TODO: Generate MWEB address via mwebd
+                    "jcmweb1..."
+                }
             }
         } catch (e: Exception) {
             null
@@ -448,6 +471,11 @@ class WalletViewModel @Inject constructor(
                     AddressType.P2TR -> {
                         val privateKeyBytes = crypto.getPrivateKeyBytes(keyPair.private)
                         crypto.createP2TRAddressWithKey(privateKeyBytes, networkParams)
+                    }
+                    AddressType.MWEB -> {
+                        // MWEB addresses require mwebd - return placeholder
+                        // TODO: Generate MWEB address via mwebd
+                        "jcmweb1..."
                     }
                 }
                 addresses[type.name] = addr
@@ -640,5 +668,104 @@ class WalletViewModel @Inject constructor(
     override fun onCleared() {
         super.onCleared()
         syncJob?.cancel()
+        mwebRepository.stop()
+    }
+
+    // ── MWEB Methods ──
+
+    /**
+     * Start MWEB daemon
+     */
+    private fun startMwebDaemon() {
+        viewModelScope.launch {
+            try {
+                val started = mwebRepository.start()
+                _isMwebRunning.value = started
+                if (started) {
+                    Log.d("WalletVM", "MWEB daemon started")
+                    syncMwebBalance()
+                }
+            } catch (e: Exception) {
+                Log.e("WalletVM", "Failed to start MWEB daemon: ${e.message}")
+                _isMwebRunning.value = false
+            }
+        }
+    }
+
+    /**
+     * Sync MWEB balance
+     */
+    fun syncMwebBalance() {
+        viewModelScope.launch {
+            try {
+                // TODO: Get scan secret from storage when MWEB key derivation is implemented
+                // val scanSecret = storage.getMwebScanSecret()
+                // val balance = mwebRepository.getBalance(scanSecret)
+                // _mwebBalance.value = balance
+
+                Log.d("WalletVM", "Syncing MWEB balance")
+            } catch (e: Exception) {
+                Log.e("WalletVM", "Failed to sync MWEB balance: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * Get MWEB addresses
+     */
+    fun getMwebAddresses(from: Int = 0, to: Int = 10) {
+        viewModelScope.launch {
+            try {
+                // TODO: Get scan/spend keys from storage when MWEB key derivation is implemented
+                // val scanSecret = storage.getMwebScanSecret()
+                // val spendPub = storage.getMwebSpendPub()
+                // val addresses = mwebRepository.getAddresses(scanSecret, spendPub, from, to)
+                // _mwebAddresses.value = addresses
+
+                Log.d("WalletVM", "Getting MWEB addresses from $from to $to")
+            } catch (e: Exception) {
+                Log.e("WalletVM", "Failed to get MWEB addresses: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * Send MWEB transaction
+     */
+    fun sendMwebTransaction(
+        recipientAddress: String,
+        amount: Long,
+        feeRatePerKb: Long = 1000
+    ) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, error = null) }
+            try {
+                // TODO: Get keys from storage when MWEB key derivation is implemented
+                // val scanSecret = storage.getMwebScanSecret()
+                // val spendSecret = storage.getMwebSpendSecret()
+                //
+                // val rawTx = mwebRepository.createTransaction(
+                //     scanSecret, spendSecret, recipientAddress, amount, feeRatePerKb
+                // )
+                //
+                // if (rawTx != null) {
+                //     val txid = mwebRepository.broadcast(rawTx)
+                //     if (txid != null) {
+                //         _uiState.update { it.copy(isLoading = false) }
+                //         syncMwebBalance()
+                //     } else {
+                //         _uiState.update { it.copy(isLoading = false, error = "Failed to broadcast transaction") }
+                //     }
+                // } else {
+                //     _uiState.update { it.copy(isLoading = false, error = "Failed to create transaction") }
+                // }
+
+                Log.d("WalletVM", "Sending MWEB transaction to $recipientAddress, amount=$amount")
+                _uiState.update { it.copy(isLoading = false, error = "MWEB send not yet implemented") }
+            } catch (e: Exception) {
+                Log.e("WalletVM", "Failed to send MWEB transaction: ${e.message}")
+                _uiState.update { it.copy(isLoading = false, error = "Failed to send: ${e.message}") }
+            }
+        }
     }
 }

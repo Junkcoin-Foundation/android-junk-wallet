@@ -39,6 +39,8 @@ import junkwallet.ui.screens.send.QrScannerScreen
 import junkwallet.ui.screens.setup.CreateWalletScreen
 import junkwallet.ui.screens.setup.ImportWalletScreen
 import junkwallet.ui.screens.setup.SetupScreen
+import junkwallet.ui.screens.mweb.MwebScreen
+import junkwallet.ui.screens.mweb.MwebSendScreen
 import junkwallet.ui.viewmodel.WalletViewModel
 import junkwallet.utils.parseQrPaymentData
 
@@ -54,6 +56,7 @@ fun JunkWalletNavHost(
     val mainRoutes = remember {
         setOf(
             Screen.Dashboard.route,
+            Screen.Mweb.route,
             Screen.Send.route,
             Screen.Receive.route,
             Screen.History.route,
@@ -392,6 +395,49 @@ fun JunkWalletNavHost(
                     navController.popBackStack()
                 },
                 onBack = { navController.popBackStack() }
+            )
+        }
+
+        // ── MWEB Screens ──
+        composable(Screen.Mweb.route) {
+            val walletViewModel: WalletViewModel = hiltViewModel()
+            val uiState by walletViewModel.uiState.collectAsState()
+
+            LaunchedEffect(uiState.isLocked) {
+                if (uiState.isLocked) {
+                    navController.navigate(Screen.Lock.route) {
+                        popUpTo(Screen.Mweb.route) { inclusive = true }
+                    }
+                }
+            }
+
+            MwebScreen(
+                viewModel = walletViewModel,
+                onNavigateToSend = { navController.navigate(Screen.MwebSend.route) },
+                onNavigateToHistory = { navController.navigate(Screen.History.route) }
+            )
+        }
+
+        composable(Screen.MwebSend.route) {
+            val walletViewModel: WalletViewModel = hiltViewModel()
+            val uiState by walletViewModel.uiState.collectAsState()
+
+            LaunchedEffect(uiState.isLocked) {
+                if (uiState.isLocked) {
+                    navController.navigate(Screen.Lock.route) {
+                        popUpTo(Screen.MwebSend.route) { inclusive = true }
+                    }
+                }
+            }
+
+            MwebSendScreen(
+                viewModel = walletViewModel,
+                onBack = { navController.popBackStack() },
+                onSuccess = {
+                    navController.navigate(Screen.Mweb.route) {
+                        popUpTo(Screen.Mweb.route) { inclusive = true }
+                    }
+                }
             )
         }
     } // end NavHost

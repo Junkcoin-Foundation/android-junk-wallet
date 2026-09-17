@@ -21,9 +21,12 @@ data class WalletState(
     val error: String? = null,
     val lastSynced: Long = 0,
     val accounts: List<WalletAccount> = emptyList(),
-    val activeAccount: WalletAccount? = null
+    val activeAccount: WalletAccount? = null,
+    val mwebBalance: Long = 0,
+    val mwebAddresses: List<String> = emptyList(),
+    val isMwebRunning: Boolean = false
 ) {
-    val totalBalance: Long get() = confirmedBalance + unconfirmedBalance
+    val totalBalance: Long get() = confirmedBalance + unconfirmedBalance + mwebBalance
     val hasUnconfirmed: Boolean get() = unconfirmedBalance != 0L
     val isOnline: Boolean get() = error == null
     val lastSyncedText: String

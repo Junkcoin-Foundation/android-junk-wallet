@@ -16,6 +16,7 @@ class AddressValidator @Inject constructor() {
                 AddressType.P2SH_P2WPKH -> "Wrapped SegWit"
                 AddressType.P2WPKH -> "Native SegWit"
                 AddressType.P2TR -> "Taproot"
+                AddressType.MWEB -> "MimbleWimble"
             }
         }
 
@@ -47,6 +48,13 @@ class AddressValidator @Inject constructor() {
                     displayName = "Taproot",
                     description = "Latest format with privacy",
                     icon = "\uD83D\uDD12",
+                    feeLevel = FeeLevel.LOWEST
+                )
+                AddressType.MWEB -> AddressTypeInfo(
+                    type = addressType,
+                    displayName = "MimbleWimble",
+                    description = "MimbleWimble Extension Block",
+                    icon = "🪄",
                     feeLevel = FeeLevel.LOWEST
                 )
             }

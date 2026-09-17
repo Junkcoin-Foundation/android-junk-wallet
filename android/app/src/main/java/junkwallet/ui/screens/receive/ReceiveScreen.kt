@@ -265,6 +265,14 @@ fun ReceiveScreen(
                                 textAlign = TextAlign.Center
                             )
                         }
+                        AddressType.MWEB -> {
+                            Text(
+                                text = "MimbleWimble - confidential transactions",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.tertiary,
+                                textAlign = TextAlign.Center
+                            )
+                        }
                     }
                 }
             }
@@ -364,6 +372,7 @@ fun ReceiveScreen(
                                     AddressType.P2SH_P2WPKH -> "3..."
                                     AddressType.P2WPKH -> "jc1q..."
                                     AddressType.P2TR -> "jc1p..."
+                                    AddressType.MWEB -> "jcmweb1..."
                                 },
                                 style = MaterialTheme.typography.bodySmall,
                                 fontFamily = FontFamily.Monospace,

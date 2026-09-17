@@ -8,12 +8,14 @@ import kotlinx.serialization.Serializable
  * P2SH-P2WPKH: SegWit wrapped in P2SH (starts with '3' on both networks)
  * P2WPKH: Native SegWit (bech32, starts with 'jc1...' mainnet, 'tjc1...' testnet)
  * P2TR: Taproot (bech32m, starts with 'jc1p...' mainnet, 'tjc1p...' testnet)
+ * MWEB: MimbleWimble Extension Block (starts with 'jcmweb1...' mainnet, 'tjcmweb1...' testnet)
  */
 enum class AddressType {
     P2PKH,          // Legacy
     P2SH_P2WPKH,    // Wrapped SegWit
     P2WPKH,         // Native SegWit (v0)
-    P2TR            // Taproot (v1)
+    P2TR,           // Taproot (v1)
+    MWEB            // MimbleWimble Extension Block
 }
 
 @Serializable
@@ -34,7 +36,9 @@ data class JunkcoinParams(
     val explorerUrl: String,
     val coinbaseMaturity: Int = 70,
     val segwitActivatedAt: Long? = null,     // Block height when SegWit activated
-    val taprootActivatedAt: Long? = null     // Block height when Taproot activated
+    val taprootActivatedAt: Long? = null,    // Block height when Taproot activated
+    val mwebActivatedAt: Long? = null,       // Block height when MWEB activated
+    val mwebHrp: String = "mweb"             // Bech32 HRP for MWEB addresses
 ) {
     val addressPrefix: String
         get() = when (pubKeyHash) {
@@ -83,6 +87,12 @@ data class JunkcoinParams(
         get() = taprootActivatedAt != null
 
     /**
+     * Check if MWEB is supported on this network.
+     */
+    val isMwebSupported: Boolean
+        get() = mwebActivatedAt != null
+
+    /**
      * Get all supported address types for this network.
      */
     val supportedAddressTypes: List<AddressType>
@@ -94,6 +104,9 @@ data class JunkcoinParams(
             }
             if (isTaprootSupported) {
                 types.add(AddressType.P2TR)
+            }
+            if (isMwebSupported) {
+                types.add(AddressType.MWEB)
             }
             return types
         }
@@ -118,8 +131,9 @@ object JunkcoinNetwork {
             "jkc-seed.junkiewally.xyz"
         ),
         electrsUrl = "https://junk-api.s3na.xyz",
-        explorerUrl = "https://explorer.junk-coin.com"
-        // SegWit/Taproot disabled on mainnet (node doesn't support them yet)
+        explorerUrl = "https://explorer.junk-coin.com",
+        mwebActivatedAt = 1165000,  // MWEB activation height
+        mwebHrp = "jcmweb"
     )
 
     val TESTNET = JunkcoinParams(
@@ -141,6 +155,8 @@ object JunkcoinNetwork {
         electrsUrl = "https://jkc-testnet-api.s3na.xyz",
         explorerUrl = "https://explorer.junk-coin.com/testnet",
         segwitActivatedAt = 140000,
-        taprootActivatedAt = 160000
+        taprootActivatedAt = 160000,
+        mwebActivatedAt = 180000,  // MWEB activation height
+        mwebHrp = "tjcmweb"
     )
 }
