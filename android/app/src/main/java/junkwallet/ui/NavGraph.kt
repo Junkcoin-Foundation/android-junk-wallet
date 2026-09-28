@@ -42,7 +42,6 @@ import junkwallet.ui.screens.send.QrScannerScreen
 import junkwallet.ui.screens.setup.CreateWalletScreen
 import junkwallet.ui.screens.setup.ImportWalletScreen
 import junkwallet.ui.screens.setup.SetupScreen
-import junkwallet.ui.screens.mweb.MwebScreen
 import junkwallet.ui.viewmodel.WalletViewModel
 import junkwallet.utils.parseQrPaymentData
 
@@ -65,7 +64,6 @@ fun JunkWalletNavHost(
     val mainRoutes = remember {
         setOf(
             Screen.Dashboard.route,
-            Screen.Mweb.route,
             Screen.Send.route,
             Screen.Receive.route,
             Screen.History.route,
@@ -434,35 +432,6 @@ fun JunkWalletNavHost(
                     navController.popBackStack()
                 },
                 onBack = { navController.popBackStack() }
-            )
-        }
-
-        // ── MWEB Screens ──
-        composable(Screen.Mweb.route) {
-            val uiState by walletViewModel.uiState.collectAsState()
-            val defaultAddressType by walletViewModel.defaultAddressType.collectAsState()
-
-            LaunchedEffect(uiState.isLocked) {
-                if (uiState.isLocked && currentRoute == Screen.Mweb.route) {
-                    navController.navigate(Screen.Lock.route) {
-                        popUpTo(Screen.Mweb.route) { inclusive = true }
-                    }
-                }
-            }
-
-            MwebScreen(
-                viewModel = walletViewModel,
-                onNavigateToSend = {
-                    // The unified send page spends from the active switcher
-                    // type: make MWEB the source before opening it.
-                    if (defaultAddressType != junkwallet.domain.model.AddressType.MWEB) {
-                        walletViewModel.setDefaultAddressType(
-                            junkwallet.domain.model.AddressType.MWEB
-                        )
-                    }
-                    navController.navigate(Screen.Send.route)
-                },
-                onNavigateToHistory = { navController.navigate(Screen.History.route) }
             )
         }
     } // end NavHost

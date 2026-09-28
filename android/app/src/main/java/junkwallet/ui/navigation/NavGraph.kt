@@ -3,7 +3,6 @@ package junkwallet.ui.navigation
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.PrivacyTip
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -28,7 +27,6 @@ sealed class Screen(val route: String) {
     data object KeyVault : Screen("key_vault")
     data object NetworkSettings : Screen("network_settings")
     data object QrScanner : Screen("qr_scanner")
-    data object Mweb : Screen("mweb")
 }
 
 data class BottomNavItem(
@@ -39,7 +37,6 @@ data class BottomNavItem(
 
 val bottomNavItems = listOf(
     BottomNavItem(Screen.Dashboard, "Wallet", Icons.Filled.AccountBalanceWallet),
-    BottomNavItem(Screen.Mweb, "MWEB", Icons.Filled.PrivacyTip),
     BottomNavItem(Screen.Send, "Send", Icons.Filled.Send),
     BottomNavItem(Screen.History, "History", Icons.Filled.History),
     BottomNavItem(Screen.Settings, "Settings", Icons.Filled.Settings)
