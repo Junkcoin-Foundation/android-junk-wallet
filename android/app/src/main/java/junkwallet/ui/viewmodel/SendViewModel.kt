@@ -109,6 +109,11 @@ class SendViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 val balance = blockchainRepository.getBalance(blockchainRepository.getWalletAddress())
+                // The init fetch completes asynchronously: if the source has
+                // already been switched to MWEB (setSource), discard this
+                // legacy transparent balance — MAX and the fee math read
+                // state.balance and would compute from the wrong wallet.
+                if (_uiState.value.sourceType == AddressType.MWEB) return@launch
                 _uiState.update { it.copy(balance = balance) }
             } catch (_: Exception) { }
         }
