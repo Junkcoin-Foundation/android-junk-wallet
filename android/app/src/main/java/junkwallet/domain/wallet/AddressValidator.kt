@@ -71,6 +71,14 @@ class AddressValidator @Inject constructor() {
             )
         }
 
+        // MWEB stealth addresses use their own HRP (jcmweb/tjcmweb),
+        // bech32 const-1 and a 66-byte program.
+        if (address.contains("1") && address.length > 5 &&
+            address.substringBefore('1') == network.mwebHrp
+        ) {
+            return validateMwebAddress(address, network)
+        }
+
         // Check for bech32/Bech32m addresses (SegWit/Taproot)
         if (address.contains("1") && address.length > 5) {
             val bech32Result = validateBech32Address(address, network)
@@ -80,7 +88,7 @@ class AddressValidator @Inject constructor() {
         }
 
         // Check for Base58 addresses (P2PKH/P2SH)
-        if (address.startsWith(network.addressPrefix) || address.startsWith(network.p2shPrefix)) {
+        if (network.addressPrefixes.any { address.startsWith(it) } || address.startsWith(network.p2shPrefix)) {
             return validateBase58Address(address, network)
         }
 
@@ -119,6 +127,28 @@ class AddressValidator @Inject constructor() {
         } catch (e: Exception) {
             return ValidationResult(isValid = false, error = "Invalid Base58 encoding")
         }
+    }
+
+    private fun validateMwebAddress(address: String, network: JunkcoinParams): ValidationResult {
+        val bech32Encoder = Bech32Encoder()
+        val decoded = bech32Encoder.decode(address)
+            ?: return ValidationResult(isValid = false, error = "Invalid MWEB encoding")
+        val (hrp, program) = decoded
+        if (hrp != network.mwebHrp) {
+            return ValidationResult(isValid = false, error = "Invalid network prefix")
+        }
+        if (bech32Encoder.getWitnessVersion(address) != 0) {
+            return ValidationResult(isValid = false, error = "Invalid MWEB address version")
+        }
+        if (program.size != 66) {
+            return ValidationResult(isValid = false, error = "Invalid MWEB address length")
+        }
+        return ValidationResult(
+            isValid = true,
+            addressType = AddressType.MWEB,
+            network = network.name,
+            witnessVersion = 0
+        )
     }
 
     private fun validateBech32Address(address: String, network: JunkcoinParams): ValidationResult {

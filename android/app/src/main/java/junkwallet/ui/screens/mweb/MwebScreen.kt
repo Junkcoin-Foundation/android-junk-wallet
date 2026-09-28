@@ -9,6 +9,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import junkwallet.domain.model.AddressType
@@ -25,6 +27,7 @@ fun MwebScreen(
     val mwebBalance by viewModel.mwebBalance.collectAsState()
     val mwebAddresses by viewModel.mwebAddresses.collectAsState()
     val isMwebRunning by viewModel.isMwebRunning.collectAsState()
+    val clipboardManager = LocalClipboardManager.current
 
     Column(
         modifier = Modifier
@@ -99,7 +102,7 @@ fun MwebScreen(
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "${mwebBalance / 100_000_000} JKC",
+                    text = String.format("%.8f JKC", mwebBalance / 100_000_000.0),
                     style = MaterialTheme.typography.headlineLarge,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSecondaryContainer
@@ -127,11 +130,31 @@ fun MwebScreen(
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     mwebAddresses.take(3).forEach { address ->
-                        Text(
-                            text = address,
-                            style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.padding(vertical = 4.dp)
-                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = address,
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.weight(1f)
+                            )
+                            IconButton(
+                                onClick = {
+                                    clipboardManager.setText(AnnotatedString(address))
+                                },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.ContentCopy,
+                                    contentDescription = "Copy address",
+                                    modifier = Modifier.size(16.dp),
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
                     }
                     if (mwebAddresses.size > 3) {
                         Text(

@@ -341,6 +341,14 @@ class JunkcoinCrypto @Inject constructor(
      * Determine the address type from an address string.
      */
     fun detectAddressType(address: String, network: junkwallet.domain.model.JunkcoinParams): junkwallet.domain.model.AddressType? {
+        // MWEB stealth addresses have their own HRP and a 66-byte program.
+        if (address.startsWith("${network.mwebHrp}1")) {
+            if (bech32Encoder.getWitnessVersion(address) != 0) return null
+            val program = bech32Encoder.getWitnessProgram(address) ?: return null
+            if (program.size != 66) return null
+            return junkwallet.domain.model.AddressType.MWEB
+        }
+
         // Check for bech32 addresses
         if (address.startsWith("${network.bech32}1")) {
             val witnessVersion = bech32Encoder.getWitnessVersion(address)
@@ -359,7 +367,7 @@ class JunkcoinCrypto @Inject constructor(
         }
 
         // Check for P2PKH addresses (starts with '7' on mainnet, 'm'/'n' on testnet)
-        if (address.startsWith(network.addressPrefix)) {
+        if (network.addressPrefixes.any { address.startsWith(it) }) {
             return junkwallet.domain.model.AddressType.P2PKH
         }
 
@@ -429,7 +437,10 @@ class JunkcoinCrypto @Inject constructor(
                 script
             }
             junkwallet.domain.model.AddressType.MWEB -> {
-                throw IllegalArgumentException("MWEB locking scripts not yet supported")
+                // MWEB outputs carry the raw 66-byte stealth program as their
+                // "script"; there is no standard scriptPubKey.
+                bech32Encoder.getWitnessProgram(address)
+                    ?: throw IllegalArgumentException("Invalid MWEB address")
             }
         }
     }
@@ -476,7 +487,10 @@ class JunkcoinCrypto @Inject constructor(
                     ?: throw IllegalArgumentException("Invalid witness address")
             }
             junkwallet.domain.model.AddressType.MWEB -> {
-                throw IllegalArgumentException("MWEB address hash not yet supported")
+                // MWEB has no hash160; the 66-byte stealth program is the
+                // full output identity.
+                bech32Encoder.getWitnessProgram(address)
+                    ?: throw IllegalArgumentException("Invalid MWEB address")
             }
         }
     }

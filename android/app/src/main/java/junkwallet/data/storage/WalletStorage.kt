@@ -66,7 +66,12 @@ class WalletStorage @Inject constructor(
         // Store: salt(16) + iv(12) + ciphertext( includes GCM tag)
         val combined = salt + iv + ciphertext
         val encoded = Base64.getEncoder().encodeToString(combined)
-        prefs.edit().putString(KEY_ENCRYPTED_WIF, encoded).apply()
+        prefs.edit()
+            .putString(KEY_ENCRYPTED_WIF, encoded)
+            // Remember which KDF cost produced this blob so a later decrypt
+            // runs exactly one PBKDF2 instead of up to three.
+            .putInt(KEY_WIF_ITERATIONS, PBKDF2_ITERATIONS)
+            .apply()
     }
 
     /**
@@ -76,8 +81,14 @@ class WalletStorage @Inject constructor(
      */
     fun getDecryptedWif(password: String): String? {
         val encoded = prefs.getString(KEY_ENCRYPTED_WIF, null) ?: return null
-        // Try current iteration count first, then fall back to old counts for backward compatibility
-        val iterationCounts = listOf(PBKDF2_ITERATIONS, PBKDF2_ITERATIONS_V1, PBKDF2_ITERATIONS_V2)
+        // Known iteration count (stored with the blob) → single KDF attempt.
+        // Unknown (blob written before this metadata existed) → try the old
+        // counts for backward compatibility.
+        val iterationCounts = if (prefs.contains(KEY_WIF_ITERATIONS)) {
+            listOf(prefs.getInt(KEY_WIF_ITERATIONS, PBKDF2_ITERATIONS))
+        } else {
+            listOf(PBKDF2_ITERATIONS, PBKDF2_ITERATIONS_V1, PBKDF2_ITERATIONS_V2)
+        }
         for (iterations in iterationCounts) {
             val result = tryDecryptWif(password, encoded, iterations)
             if (result != null) {
@@ -153,17 +164,49 @@ class WalletStorage @Inject constructor(
 
     // ── Session WIF (decrypted, in-memory only) ──
 
+    /**
+     * The active account's private key (WIF). Cleared on lock.
+     */
     @Volatile
     private var sessionWif: String? = null
 
+    /**
+     * The wallet's ROOT private key (the one encrypted with the user password/PIN).
+     * Used to encrypt per-account keys so they can be unlocked while the wallet is
+     * unlocked, without plumbing the password through every ViewModel.
+     * Cleared on lock.
+     */
+    @Volatile
+    private var masterWif: String? = null
+
+    /**
+     * Set the active account key. If no root key is known yet (fresh unlock),
+     * remember it as the root key as well.
+     */
     fun saveSessionWif(wif: String) {
         sessionWif = wif
+        if (masterWif == null) masterWif = wif
     }
+
+    /**
+     * Switch the active account key WITHOUT touching the root key.
+     */
+    fun setActiveAccountWif(wif: String) {
+        sessionWif = wif
+    }
+
+    fun saveMasterWif(wif: String) {
+        masterWif = wif
+        if (sessionWif == null) sessionWif = wif
+    }
+
+    fun getMasterWif(): String? = masterWif
 
     fun getSessionWif(): String? = sessionWif
 
     fun clearSessionWif() {
         sessionWif = null
+        masterWif = null
     }
 
     /**
@@ -197,7 +240,10 @@ class WalletStorage @Inject constructor(
 
         val combined = salt + iv + ciphertext
         val encoded = Base64.getEncoder().encodeToString(combined)
-        prefs.edit().putString(KEY_PIN_ENCRYPTED_WIF, encoded).apply()
+        prefs.edit()
+            .putString(KEY_PIN_ENCRYPTED_WIF, encoded)
+            .putInt(KEY_PIN_ITERATIONS, PBKDF2_ITERATIONS)
+            .apply()
     }
 
     /**
@@ -218,7 +264,10 @@ class WalletStorage @Inject constructor(
      * Remove PIN.
      */
     fun clearPin() {
-        prefs.edit().remove(KEY_PIN_ENCRYPTED_WIF).apply()
+        prefs.edit()
+            .remove(KEY_PIN_ENCRYPTED_WIF)
+            .remove(KEY_PIN_ITERATIONS)
+            .apply()
     }
 
     /**
@@ -227,8 +276,11 @@ class WalletStorage @Inject constructor(
      */
     fun getDecryptedWifByPin(pin: String): String? {
         val encoded = prefs.getString(KEY_PIN_ENCRYPTED_WIF, null) ?: return null
-        // Try current iteration count first, then fall back to old counts for backward compatibility
-        val iterationCounts = listOf(PBKDF2_ITERATIONS, PBKDF2_ITERATIONS_V1, PBKDF2_ITERATIONS_V2)
+        val iterationCounts = if (prefs.contains(KEY_PIN_ITERATIONS)) {
+            listOf(prefs.getInt(KEY_PIN_ITERATIONS, PBKDF2_ITERATIONS))
+        } else {
+            listOf(PBKDF2_ITERATIONS, PBKDF2_ITERATIONS_V1, PBKDF2_ITERATIONS_V2)
+        }
         for (iterations in iterationCounts) {
             val result = tryDecryptWifByPin(pin, encoded, iterations)
             if (result != null) {
@@ -265,6 +317,7 @@ class WalletStorage @Inject constructor(
     fun deleteWallet() {
         prefs.edit().clear().apply()
         sessionWif = null
+        masterWif = null
     }
 
     // ── Multi-Account Storage ──
@@ -293,30 +346,57 @@ class WalletStorage @Inject constructor(
         prefs.edit().putString(KEY_ACTIVE_ACCOUNT_ID, accountId).apply()
     }
 
-    fun getAccountWif(accountId: String, password: String): String? {
+    /**
+     * Decrypt an account's private key. Requires the wallet to be unlocked
+     * (root key in memory). Returns null when locked or when the account has
+     * no stored key yet.
+     */
+    fun getAccountWif(accountId: String): String? {
+        val root = masterWif ?: return null
         val key = "${KEY_ACCOUNT_ENCRYPTED_WIF_PREFIX}$accountId"
         val encoded = prefs.getString(key, null) ?: return null
+        // Missing metadata = blob written by an older build (always 600K).
+        val iterations = prefs.getInt(KEY_ACCOUNT_ITERATIONS_PREFIX + accountId, PBKDF2_ITERATIONS)
         return try {
             val combined = Base64.getDecoder().decode(encoded)
             val salt = combined.copyOfRange(0, 16)
             val iv = combined.copyOfRange(16, 28)
             val ciphertext = combined.copyOfRange(28, combined.size)
 
-            val deriveKey = deriveKey(password, salt)
+            val deriveKey = deriveKeyWithIterations(root, salt, iterations)
             val cipher = Cipher.getInstance("AES/GCM/NoPadding")
             cipher.init(Cipher.DECRYPT_MODE, deriveKey, GCMParameterSpec(128, iv))
             val plaintext = cipher.doFinal(ciphertext)
+            val wif = String(plaintext, Charsets.UTF_8)
 
-            String(plaintext, Charsets.UTF_8)
+            // One-time migration: account keys are protected by an already
+            // derived 256-bit root secret, so they do not need the password
+            // stretching cost. Re-encrypt cheaply so unlock() stops burning
+            // seconds of main thread time on PBKDF2.
+            if (iterations != ACCOUNT_KEY_ITERATIONS) {
+                saveAccountEncryptedWif(accountId, wif)
+            }
+            wif
         } catch (e: Exception) {
             null
         }
     }
 
-    fun saveAccountEncryptedWif(accountId: String, wif: String, password: String) {
+    /**
+     * Whether an encrypted key exists for this account (even if it cannot be
+     * decrypted with the current root key).
+     */
+    fun hasAccountWif(accountId: String): Boolean =
+        prefs.contains("${KEY_ACCOUNT_ENCRYPTED_WIF_PREFIX}$accountId")
+
+    /**
+     * Encrypt and persist an account's private key (rooted at the wallet's own key).
+     */
+    fun saveAccountEncryptedWif(accountId: String, wif: String): Boolean {
+        val root = masterWif ?: return false
         val salt = generateRandomBytes(16)
         val iv = generateRandomBytes(12)
-        val key = deriveKey(password, salt)
+        val key = deriveKeyWithIterations(root, salt, ACCOUNT_KEY_ITERATIONS)
 
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.ENCRYPT_MODE, key, GCMParameterSpec(128, iv))
@@ -325,7 +405,11 @@ class WalletStorage @Inject constructor(
         val combined = salt + iv + ciphertext
         val encoded = Base64.getEncoder().encodeToString(combined)
         val storageKey = "${KEY_ACCOUNT_ENCRYPTED_WIF_PREFIX}$accountId"
-        prefs.edit().putString(storageKey, encoded).apply()
+        prefs.edit()
+            .putString(storageKey, encoded)
+            .putInt(KEY_ACCOUNT_ITERATIONS_PREFIX + accountId, ACCOUNT_KEY_ITERATIONS)
+            .apply()
+        return true
     }
 
     fun deleteAccountStorage(accountId: String) {
@@ -335,7 +419,7 @@ class WalletStorage @Inject constructor(
 
     fun migrateSingleWalletToAccount() {
         if (hasStoredWallet() && getAccounts().isEmpty()) {
-            val wif = sessionWif
+            val wif = masterWif ?: sessionWif
             if (wif != null) {
                 val network = when (getNetwork()) {
                     "testnet" -> NetworkType.TESTNET
@@ -349,6 +433,8 @@ class WalletStorage @Inject constructor(
                 )
                 saveAccounts(listOf(account))
                 setActiveAccountId(account.id)
+                // The root key IS this account's key.
+                saveAccountEncryptedWif(account.id, wif)
             }
         }
     }
@@ -376,6 +462,8 @@ class WalletStorage @Inject constructor(
         private const val PREFS_FILE_NAME = "junk_wallet_secure"
         private const val KEY_ENCRYPTED_WIF = "encrypted_wif"
         private const val KEY_PIN_ENCRYPTED_WIF = "pin_encrypted_wif"
+        private const val KEY_WIF_ITERATIONS = "encrypted_wif_iterations"
+        private const val KEY_PIN_ITERATIONS = "pin_encrypted_wif_iterations"
         private const val KEY_ADDRESS = "wallet_address"
         private const val KEY_NETWORK = "network_type"
         private const val KEY_DEFAULT_ADDRESS_TYPE = "default_address_type"
@@ -385,6 +473,12 @@ class WalletStorage @Inject constructor(
         private const val KEY_ACCOUNTS_JSON = "accounts_json"
         private const val KEY_ACTIVE_ACCOUNT_ID = "active_account_id"
         private const val KEY_ACCOUNT_ENCRYPTED_WIF_PREFIX = "account_"
+        private const val KEY_ACCOUNT_ITERATIONS_PREFIX = "account_iterations_"
+
+        // Account keys are encrypted with the root key itself (a derived
+        // 256-bit secret), not with a user password, so password stretching
+        // is pointless: keep a cheap KDF so unlocking stays instant.
+        private const val ACCOUNT_KEY_ITERATIONS = 10_000
 
         const val NETWORK_MAINNET = "mainnet"
         const val NETWORK_TESTNET = "testnet"

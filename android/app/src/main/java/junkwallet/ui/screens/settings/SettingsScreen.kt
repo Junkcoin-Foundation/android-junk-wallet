@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -41,20 +40,23 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import junkwallet.domain.model.AddressType
 import junkwallet.domain.model.NetworkType
 import junkwallet.domain.wallet.AddressValidator
 import junkwallet.ui.theme.Background
+import junkwallet.ui.components.PinBoxesInput
 import junkwallet.ui.theme.ErrorCrimson
 import junkwallet.ui.theme.NetworkMainnet
 import junkwallet.ui.theme.NetworkTestnet
@@ -75,12 +77,14 @@ fun SettingsScreen(
     onNetworkChanged: (NetworkType) -> Unit = {},
     defaultAddressType: AddressType = AddressType.P2PKH,
     onAddressTypeChanged: (AddressType) -> Unit = {},
+    /** Address types usable on the current network (MWEB is not derivable yet). */
+    supportedAddressTypes: List<AddressType> = AddressType.entries,
     biometricEnabled: Boolean = false,
     onBiometricChanged: (Boolean) -> Unit = {},
     hasPin: Boolean = false,
     onPinSetup: (String) -> Unit = {},
     onPinRemove: () -> Unit = {},
-    onChangePassword: (currentPassword: String, newPassword: String) -> Boolean = { _, _ -> false },
+    onChangePassword: suspend (currentPassword: String, newPassword: String) -> Boolean = { _, _ -> false },
     versionName: String = "1.0.0"
 ) {
     var showNetworkMenu by remember { mutableStateOf(false) }
@@ -226,7 +230,7 @@ fun SettingsScreen(
                             expanded = showAddressTypeMenu,
                             onDismissRequest = { showAddressTypeMenu = false }
                         ) {
-                            AddressType.entries.forEach { type ->
+                            supportedAddressTypes.forEach { type ->
                                 val typeInfo = AddressValidator.getAddressTypeInfo(type)
                                 DropdownMenuItem(
                                     text = {
@@ -268,7 +272,7 @@ fun SettingsScreen(
                         )
                         Spacer(modifier = Modifier.height(8.dp))
 
-                        AddressType.entries.forEach { type ->
+                        supportedAddressTypes.forEach { type ->
                             val typeInfo = AddressValidator.getAddressTypeInfo(type)
                             val feeLevelText = when (typeInfo.feeLevel) {
                                 AddressValidator.FeeLevel.HIGH -> "High"
@@ -376,10 +380,18 @@ fun SettingsScreen(
                     // Explorer link
                     SettingClickable(
                         title = "Block Explorer",
-                        subtitle = "explorer.junk-coin.com",
+                        subtitle = if (currentNetwork == NetworkType.TESTNET) {
+                            "explorer.junk-coin.com/testnet"
+                        } else {
+                            "explorer.junk-coin.com"
+                        },
                         onClick = {
-                            val intent = Intent(Intent.ACTION_VIEW,
-                                android.net.Uri.parse("https://explorer.junk-coin.com"))
+                            val url = if (currentNetwork == NetworkType.TESTNET) {
+                                "https://explorer.junk-coin.com/testnet"
+                            } else {
+                                "https://explorer.junk-coin.com"
+                            }
+                            val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url))
                             context.startActivity(intent)
                         }
                     )
@@ -580,26 +592,19 @@ private fun PinSetupDialog(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                OutlinedTextField(
-                    value = if (step == 0) pin else confirmPin,
-                    onValueChange = { value ->
-                        if (value.length <= 6 && value.all { it.isDigit() }) {
+                // One box per digit; key(step) so the confirm step starts
+                // fresh and re-focuses the keyboard.
+                key(step) {
+                    PinBoxesInput(
+                        pin = if (step == 0) pin else confirmPin,
+                        onPinChange = { value ->
                             if (step == 0) pin = value else confirmPin = value
                             error = null
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    visualTransformation = PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = PrimaryCyan,
-                        unfocusedBorderColor = SurfaceContainerHigh
-                    ),
-                    shape = MaterialTheme.shapes.medium,
-                    singleLine = true,
-                    isError = error != null,
-                    placeholder = { Text("Enter PIN", color = TextMuted) }
-                )
+                        },
+                        isError = error != null,
+                        autoFocus = true
+                    )
+                }
 
                 if (error != null) {
                     Spacer(modifier = Modifier.height(8.dp))
@@ -654,13 +659,15 @@ private fun PinSetupDialog(
 private fun ChangePasswordDialog(
     onDismiss: () -> Unit,
     onPasswordChanged: () -> Unit,
-    onChangePassword: (currentPassword: String, newPassword: String) -> Boolean = { _, _ -> false }
+    onChangePassword: suspend (currentPassword: String, newPassword: String) -> Boolean = { _, _ -> false }
 ) {
     var currentPassword by remember { mutableStateOf("") }
     var newPassword by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
     var step by remember { mutableIntStateOf(0) } // 0 = current password, 1 = new password, 2 = confirm
+    var busy by remember { mutableStateOf(false) }
+    val dialogScope = rememberCoroutineScope()
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -741,6 +748,7 @@ private fun ChangePasswordDialog(
                     Text("Cancel", color = TextMuted)
                 }
                 TextButton(
+                    enabled = !busy,
                     onClick = {
                         when (step) {
                             0 -> {
@@ -763,23 +771,32 @@ private fun ChangePasswordDialog(
                                     step = 1
                                     newPassword = ""
                                     confirmPassword = ""
-                                } else {
-                                    val success = onChangePassword(currentPassword, newPassword)
-                                    if (success) {
-                                        onPasswordChanged()
-                                    } else {
-                                        error = "Current password is incorrect"
-                                        step = 0
-                                        currentPassword = ""
-                                        newPassword = ""
-                                        confirmPassword = ""
+                                } else if (!busy) {
+                                    // Two PBKDF2 runs (decrypt + re-encrypt):
+                                    // keep them off the main thread.
+                                    busy = true
+                                    dialogScope.launch {
+                                        val success = onChangePassword(
+                                            currentPassword,
+                                            newPassword
+                                        )
+                                        busy = false
+                                        if (success) {
+                                            onPasswordChanged()
+                                        } else {
+                                            error = "Current password is incorrect"
+                                            step = 0
+                                            currentPassword = ""
+                                            newPassword = ""
+                                            confirmPassword = ""
+                                        }
                                     }
                                 }
                             }
                         }
                     }
                 ) {
-                    Text("OK", color = PrimaryCyan)
+                    Text(if (busy) "…" else "OK", color = PrimaryCyan)
                 }
             }
         },

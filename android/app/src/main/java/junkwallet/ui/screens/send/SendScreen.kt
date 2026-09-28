@@ -75,11 +75,18 @@ fun SendScreen(
     onBack: () -> Unit,
     onSuccess: (String) -> Unit,
     onQrScan: () -> Unit = {},
+    sourceAddressType: AddressType = AddressType.P2PKH,
+    mwebBalance: Long = 0L,
     viewModel: SendViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val validation by viewModel.validation.collectAsState()
     val addressInfo by viewModel.addressInfo.collectAsState()
+
+    // Funding source follows the home address-type switcher.
+    LaunchedEffect(sourceAddressType, mwebBalance) {
+        viewModel.setSource(sourceAddressType, mwebBalance)
+    }
 
     LaunchedEffect(uiState.isSent) {
         if (uiState.isSent && uiState.txId != null) {
@@ -169,6 +176,15 @@ fun SendScreen(
             // Content based on step
             when (uiState.currentStep) {
                 SendViewModel.Step.INPUT -> {
+                    if (uiState.qrBanner) {
+                        QrScannedBanner(
+                            address = uiState.recipientAddress,
+                            amount = uiState.amount,
+                            opReturnData = uiState.opReturnData,
+                            onDismiss = { viewModel.dismissQrBanner() }
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                    }
                     InputStep(
                         recipientAddress = uiState.recipientAddress,
                         onAddressChange = { viewModel.updateRecipientAddress(it) },
@@ -187,7 +203,8 @@ fun SendScreen(
                         onCustomFeeRateChange = { viewModel.updateCustomFeeRate(it) },
                         onMaxClick = { viewModel.fillMaxAmount() },
                         onSend = { viewModel.startConfirmation() },
-                        onQrScan = onQrScan
+                        onQrScan = onQrScan,
+                        isMwebSource = uiState.sourceType == AddressType.MWEB
                     )
                 }
 
@@ -323,7 +340,8 @@ private fun InputStep(
     onCustomFeeRateChange: (String) -> Unit,
     onMaxClick: () -> Unit,
     onSend: () -> Unit,
-    onQrScan: () -> Unit = {}
+    onQrScan: () -> Unit = {},
+    isMwebSource: Boolean = false
 ) {
     Column(
         modifier = Modifier
@@ -484,7 +502,11 @@ private fun InputStep(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Text(
-                text = "Available: ${String.format("%.8f", balance / 100_000_000.0)} JKC",
+                text = if (isMwebSource) {
+                    "Available (MWEB): ${String.format("%.8f", balance / 100_000_000.0)} JKC"
+                } else {
+                    "Available: ${String.format("%.8f", balance / 100_000_000.0)} JKC"
+                },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -576,32 +598,34 @@ private fun InputStep(
             )
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
+        // OP_RETURN Data (optional) — meaningless for mweb kernel spends.
+        if (!isMwebSource) {
+            Spacer(modifier = Modifier.height(24.dp))
 
-        // OP_RETURN Data (optional)
-        Text(
-            text = "OP_RETURN Data (optional)",
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
-
-        OutlinedTextField(
-            value = opReturnData,
-            onValueChange = onOpReturnChange,
-            modifier = Modifier.fillMaxWidth(),
-            placeholder = {
-                Text(
-                    text = "Hex data to embed (max 80 bytes)",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            },
-            shape = RoundedCornerShape(12.dp),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = MaterialTheme.colorScheme.primary,
-                unfocusedBorderColor = MaterialTheme.colorScheme.outline
+            Text(
+                text = "OP_RETURN Data (optional)",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.padding(bottom = 8.dp)
             )
-        )
+
+            OutlinedTextField(
+                value = opReturnData,
+                onValueChange = onOpReturnChange,
+                modifier = Modifier.fillMaxWidth(),
+                placeholder = {
+                    Text(
+                        text = "Hex data to embed (max 80 bytes)",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                },
+                shape = RoundedCornerShape(12.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = MaterialTheme.colorScheme.primary,
+                    unfocusedBorderColor = MaterialTheme.colorScheme.outline
+                )
+            )
+        }
 
         Spacer(modifier = Modifier.height(32.dp))
 
@@ -973,5 +997,69 @@ private fun Surface(
             .background(color)
     ) {
         content()
+    }
+}
+
+/**
+ * Summary shown after a QR was scanned — proves which fields were auto-filled
+ * from the QR payload (address / amount / OP_RETURN), e.g. a bridge deposit QR.
+ */
+@Composable
+private fun QrScannedBanner(
+    address: String,
+    amount: String,
+    opReturnData: String,
+    onDismiss: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+        )
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(14.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = "Filled from QR",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                )
+                IconButton(onClick = onDismiss, modifier = Modifier.size(24.dp)) {
+                    Icon(Icons.Filled.Clear, contentDescription = "Dismiss", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            Spacer(modifier = Modifier.height(6.dp))
+            QrBannerRow("Address", address)
+            QrBannerRow("Amount", if (amount.isNotBlank()) "$amount JKC" else "not in QR")
+            QrBannerRow(
+                "OP_RETURN",
+                if (opReturnData.isNotBlank()) opReturnData else "not in QR"
+            )
+        }
+    }
+}
+
+@Composable
+private fun QrBannerRow(label: String, value: String) {
+    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
+        Text(
+            text = "$label: ",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.width(84.dp)
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurface,
+            fontFamily = FontFamily.Monospace,
+            modifier = Modifier.weight(1f)
+        )
     }
 }

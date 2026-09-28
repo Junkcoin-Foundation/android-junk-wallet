@@ -57,10 +57,16 @@ class WalletCacheRepository @Inject constructor(
 
     /**
      * Check if cache is fresh enough (synced within CACHE_FRESHNESS_MS).
+     *
+     * Freshness must be per ADDRESS: network meta is shared per network, so a
+     * sync that just happened for address A must not make an unsynced address B
+     * look fresh (that was the stale-balance bug after account/network switch).
      */
     suspend fun isCacheFresh(address: String, network: String): Boolean {
         val meta = dao.getNetworkMeta(network) ?: return false
-        return (System.currentTimeMillis() - meta.lastSynced) < CACHE_FRESHNESS_MS
+        if ((System.currentTimeMillis() - meta.lastSynced) >= CACHE_FRESHNESS_MS) return false
+        // Meta is fresh — only treat as fresh if we actually hold data for this address.
+        return dao.getBalance(address, network) != null
     }
 
     /**
@@ -162,6 +168,9 @@ class WalletCacheRepository @Inject constructor(
             dao.clearBalance(address, network)
             dao.clearTransactions(address, network)
             dao.clearUtxos(address, network)
+            // Meta drives cache freshness for the whole network — drop it so the
+            // next sync is forced to hit the network instead of returning stale data.
+            dao.clearNetworkMeta(network)
             Log.d(TAG, "clearAllData: cleared cache for $address on $network")
         } catch (e: Exception) {
             Log.e(TAG, "clearAllData failed: ${e.message}")

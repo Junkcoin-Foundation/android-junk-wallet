@@ -121,9 +121,8 @@ dependencies {
     implementation(libs.bouncycastle)
     implementation(libs.secp256k1.kmp)
 
-    // MWEB (junkcoin-mwebd AAR)
-    // Uncomment when AAR is built and placed in libs/
-    // implementation(files("libs/junkcoin-mweb.aar"))
+    // MWEB (junkcoin-mwebd via gomobile, see :mweb module)
+    implementation(project(":mweb"))
 
     // Room
     implementation(libs.room.runtime)

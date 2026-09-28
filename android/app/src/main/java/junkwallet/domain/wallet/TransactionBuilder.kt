@@ -58,6 +58,10 @@ class TransactionBuilder @Inject constructor(
         val recipientAddressType = crypto.detectAddressType(recipientAddress, network)
             ?: throw IllegalArgumentException("Could not detect recipient address type")
 
+        if (recipientAddressType == AddressType.MWEB) {
+            throw IllegalArgumentException("MWEB recipients require the peg-in flow")
+        }
+
         val inputAddressType = crypto.detectAddressType(changeAddress, network)
             ?: throw IllegalArgumentException("Could not detect wallet address type")
 

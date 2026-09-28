@@ -38,6 +38,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -46,6 +47,9 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import junkwallet.data.storage.WalletStorage
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import junkwallet.domain.wallet.JunkcoinCrypto
 import junkwallet.ui.theme.Background
 import junkwallet.ui.theme.ErrorCrimson
@@ -68,6 +72,8 @@ fun KeyVaultScreen(
     var revealedKey by remember { mutableStateOf<String?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var isVerified by remember { mutableStateOf(false) }
+    var verifying by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
     val context = LocalContext.current
     val scrollState = rememberScrollState()
@@ -152,21 +158,32 @@ fun KeyVaultScreen(
 
                 Button(
                     onClick = {
-                        val wif = storage.getDecryptedWif(password)
-                        if (wif != null) {
-                            revealedKey = wif
-                            isVerified = true
-                            error = null
-                        } else {
-                            error = "Incorrect password"
+                        if (verifying) return@Button
+                        // PBKDF2 decrypt: run it off the main thread.
+                        verifying = true
+                        scope.launch {
+                            val wif = withContext(Dispatchers.IO) {
+                                storage.getDecryptedWif(password)
+                            }
+                            verifying = false
+                            if (wif != null) {
+                                revealedKey = wif
+                                isVerified = true
+                                error = null
+                            } else {
+                                error = "Incorrect password"
+                            }
                         }
                     },
                     modifier = Modifier.fillMaxWidth(),
-                    enabled = password.isNotBlank(),
+                    enabled = password.isNotBlank() && !verifying,
                     colors = ButtonDefaults.buttonColors(containerColor = PrimaryCyan),
                     shape = MaterialTheme.shapes.medium
                 ) {
-                    Text("Verify Password", style = MaterialTheme.typography.labelLarge)
+                    Text(
+                        text = if (verifying) "Verifying…" else "Verify Password",
+                        style = MaterialTheme.typography.labelLarge
+                    )
                 }
             } else {
                 // ── Key Display ──

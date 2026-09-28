@@ -23,3 +23,5 @@ dependencyResolutionManagement {
 
 rootProject.name = "JunkWallet"
 include(":app")
+// Junkcoin MWEB (junkcoin-mwebd via gomobile) — see mweb/README.md
+include(":mweb")

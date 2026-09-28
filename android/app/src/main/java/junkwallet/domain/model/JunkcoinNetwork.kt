@@ -43,8 +43,19 @@ data class JunkcoinParams(
     val addressPrefix: String
         get() = when (pubKeyHash) {
             0x10 -> "7"   // mainnet
-            0x6F -> "m"   // testnet
+            0x6F -> "m"   // testnet (primary)
             else -> "?"
+        }
+
+    /**
+     * Leading characters a P2PKH address may start with on this network.
+     * Base58 makes testnet legacy addresses start with either 'm' or 'n'.
+     */
+    val addressPrefixes: List<String>
+        get() = when (pubKeyHash) {
+            0x10 -> listOf("7")
+            0x6F -> listOf("m", "n")
+            else -> listOf(addressPrefix)
         }
 
     val wifPrefix: String
@@ -132,6 +143,8 @@ object JunkcoinNetwork {
         ),
         electrsUrl = "https://junk-api.s3na.xyz",
         explorerUrl = "https://explorer.junk-coin.com",
+        segwitActivatedAt = 1145000,  // chainparams: SegwitHeight
+        taprootActivatedAt = 1155000, // chainparams: TaprootHeight
         mwebActivatedAt = 1165000,  // MWEB activation height
         mwebHrp = "jcmweb"
     )

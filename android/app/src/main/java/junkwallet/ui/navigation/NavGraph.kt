@@ -29,7 +29,6 @@ sealed class Screen(val route: String) {
     data object NetworkSettings : Screen("network_settings")
     data object QrScanner : Screen("qr_scanner")
     data object Mweb : Screen("mweb")
-    data object MwebSend : Screen("mweb_send")
 }
 
 data class BottomNavItem(

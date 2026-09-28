@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- API 27+ only: android:windowLightNavigationBar does not exist below 27. -->
+<resources>
+    <style name="Theme.JunkWallet" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowLightNavigationBar">false</item>
+    </style>
+</resources>

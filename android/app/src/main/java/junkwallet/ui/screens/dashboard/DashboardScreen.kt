@@ -22,10 +22,12 @@ import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Wallet
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -41,6 +43,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -92,6 +95,7 @@ fun DashboardScreen(
     onAccountSelected: (String) -> Unit = {},
     onAccountRename: (String, String) -> Unit = { _, _ -> },
     onAccountCreate: (String) -> Unit = {},
+    onAccountDelete: (String) -> Unit = {},
     accounts: List<junkwallet.domain.model.WalletAccount> = emptyList(),
     activeAccountId: String = "",
     onTxClick: (String) -> Unit,
@@ -102,6 +106,7 @@ fun DashboardScreen(
     blockHeight: Int = 0,
     networkName: String = "Mainnet",
     defaultAddressType: AddressType = AddressType.P2PKH,
+    mwebBalance: Long = 0L,
     isLoading: Boolean = false,
     transactions: List<TransactionInfo> = emptyList(),
     fiatPriceUsd: Double = 0.0,
@@ -113,6 +118,13 @@ fun DashboardScreen(
 ) {
     val clipboard = LocalClipboardManager.current
     val isMainnet = networkName.lowercase().contains("main")
+    // When MWEB is the active type, show its daemon address (the stored
+    // transparent address keeps syncing in the background).
+    val displayedAddress = if (defaultAddressType == AddressType.MWEB) {
+        allAddresses[AddressType.MWEB.name] ?: address
+    } else {
+        address
+    }
     val networkColor = if (isMainnet) NetworkMainnet else NetworkTestnet
 
     Scaffold(
@@ -127,9 +139,10 @@ fun DashboardScreen(
                             modifier = Modifier.size(24.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                        // Account dropdown
-                        var showAccountMenu by remember { mutableStateOf(false) }
-                        val activeAccount = accounts.find { it.id == activeAccountId }
+                                // Account dropdown
+                                var showAccountMenu by remember { mutableStateOf(false) }
+                                var accountToDelete by remember { mutableStateOf<WalletAccount?>(null) }
+                                val activeAccount = accounts.find { it.id == activeAccountId }
                         Box {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
@@ -168,6 +181,22 @@ fun DashboardScreen(
                                                 )
                                             }
                                         },
+                                        trailingIcon = {
+                                            IconButton(
+                                                onClick = {
+                                                    showAccountMenu = false
+                                                    accountToDelete = account
+                                                },
+                                                modifier = Modifier.size(28.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Delete,
+                                                    contentDescription = "Delete ${account.name}",
+                                                    tint = TextMuted,
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                            }
+                                        },
                                         onClick = {
                                             onAccountSelected(account.id)
                                             showAccountMenu = false
@@ -188,6 +217,35 @@ fun DashboardScreen(
                                     }
                                 )
                             }
+                        }
+
+                        accountToDelete?.let { target ->
+                            AlertDialog(
+                                onDismissRequest = { accountToDelete = null },
+                                title = { Text("Delete ${target.name}?") },
+                                text = {
+                                    Text(
+                                        if (accounts.size <= 1) {
+                                            "This is your only account. Deleting it wipes this wallet from the device."
+                                        } else {
+                                            "This account's key and addresses are removed from this device."
+                                        }
+                                    )
+                                },
+                                confirmButton = {
+                                    TextButton(onClick = {
+                                        accountToDelete = null
+                                        onAccountDelete(target.id)
+                                    }) {
+                                        Text("Delete", color = MaterialTheme.colorScheme.error)
+                                    }
+                                },
+                                dismissButton = {
+                                    TextButton(onClick = { accountToDelete = null }) {
+                                        Text("Cancel")
+                                    }
+                                }
+                            )
                         }
                     }
                 },
@@ -268,11 +326,12 @@ fun DashboardScreen(
                 BalanceCard(
                     confirmedBalance = confirmedBalance,
                     unconfirmedBalance = unconfirmedBalance,
-                    address = address,
+                    address = displayedAddress,
                     allAddresses = allAddresses,
                     fiatPriceUsd = fiatPriceUsd,
                     defaultAddressType = defaultAddressType,
-                    onCopyAddress = { clipboard.setText(AnnotatedString(address)) },
+                    mwebBalance = mwebBalance,
+                    onCopyAddress = { clipboard.setText(AnnotatedString(displayedAddress)) },
                     onAddressTypeChanged = onAddressTypeChanged
                 )
             }
@@ -435,10 +494,14 @@ private fun BalanceCard(
     allAddresses: Map<String, String> = emptyMap(),
     fiatPriceUsd: Double,
     defaultAddressType: AddressType = AddressType.P2PKH,
+    mwebBalance: Long = 0L,
     onCopyAddress: () -> Unit,
     onAddressTypeChanged: (AddressType) -> Unit = {}
 ) {
     var showTypeDropdown by remember { mutableStateOf(false) }
+    val isMwebSource = defaultAddressType == AddressType.MWEB
+    val totalSat =
+        if (isMwebSource) mwebBalance else confirmedBalance + unconfirmedBalance
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -458,14 +521,14 @@ private fun BalanceCard(
             )
             Spacer(modifier = Modifier.height(6.dp))
             Text(
-                text = formatBalance(confirmedBalance + unconfirmedBalance),
+                text = formatBalance(totalSat),
                 style = MaterialTheme.typography.displayMedium,
                 color = TextHighEmphasis,
                 fontFamily = FontFamily.Monospace,
                 fontWeight = FontWeight.Bold
             )
 
-            if (unconfirmedBalance != 0L) {
+            if (!isMwebSource && unconfirmedBalance != 0L) {
                 Spacer(modifier = Modifier.height(6.dp))
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
@@ -492,7 +555,7 @@ private fun BalanceCard(
 
             if (fiatPriceUsd > 0) {
                 Spacer(modifier = Modifier.height(6.dp))
-                val jkcAmount = (confirmedBalance + unconfirmedBalance) / 100_000_000.0
+                val jkcAmount = totalSat / 100_000_000.0
                 Text(
                     text = String.format("≈ $%.4f USD", jkcAmount * fiatPriceUsd),
                     style = MaterialTheme.typography.bodySmall,

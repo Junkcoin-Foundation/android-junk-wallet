@@ -46,6 +46,9 @@ interface WalletCacheDao {
     @Query("SELECT * FROM cached_network_meta WHERE network = :network LIMIT 1")
     suspend fun getNetworkMeta(network: String): CachedNetworkMeta?
 
+    @Query("DELETE FROM cached_network_meta WHERE network = :network")
+    suspend fun clearNetworkMeta(network: String)
+
     // ── Cleanup ──
 
     @Query("DELETE FROM cached_balance WHERE address = :address AND network = :network")

@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Fingerprint
@@ -35,10 +34,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import junkwallet.ui.components.PinBoxesInput
 import junkwallet.ui.theme.Background
 import junkwallet.ui.theme.ErrorCrimson
 import junkwallet.ui.theme.PrimaryCyan
@@ -54,7 +53,8 @@ fun LockScreen(
     hasStoredWallet: Boolean = true,
     hasPin: Boolean = false,
     error: String? = null,
-    biometricAvailable: Boolean = false
+    biometricAvailable: Boolean = false,
+    isVerifying: Boolean = false
 ) {
     var password by remember { mutableStateOf("") }
     var pin by remember { mutableStateOf("") }
@@ -137,6 +137,7 @@ fun LockScreen(
             OutlinedTextField(
                 value = password,
                 onValueChange = { password = it; localError = null },
+                enabled = !isVerifying,
                 modifier = Modifier.fillMaxWidth(),
                 visualTransformation = PasswordVisualTransformation(),
                 colors = OutlinedTextFieldDefaults.colors(
@@ -149,7 +150,7 @@ fun LockScreen(
                 placeholder = { Text("Enter your password", color = TextMuted) }
             )
         } else {
-            // PIN input
+            // PIN input: one box per digit, so typos are visible immediately
             Text(
                 text = "Enter PIN",
                 style = MaterialTheme.typography.titleMedium,
@@ -158,25 +159,15 @@ fun LockScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            OutlinedTextField(
-                value = pin,
-                onValueChange = { newPin ->
-                    if (newPin.length <= 6 && newPin.all { it.isDigit() }) {
-                        pin = newPin
-                        localError = null
-                    }
+            PinBoxesInput(
+                pin = pin,
+                onPinChange = { newPin ->
+                    pin = newPin
+                    localError = null
                 },
-                modifier = Modifier.fillMaxWidth(),
-                visualTransformation = PasswordVisualTransformation(),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = PrimaryCyan,
-                    unfocusedBorderColor = SurfaceContainerHigh
-                ),
-                shape = MaterialTheme.shapes.medium,
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 isError = displayError != null,
-                placeholder = { Text("Enter 4-6 digit PIN", color = TextMuted) }
+                enabled = !isVerifying,
+                autoFocus = true
             )
         }
 
@@ -193,6 +184,7 @@ fun LockScreen(
 
         Button(
             onClick = {
+                if (isVerifying) return@Button
                 if (inputMode == 0 || !hasPin) {
                     if (password.isBlank()) {
                         localError = "Please enter your password"
@@ -208,7 +200,8 @@ fun LockScreen(
                 }
             },
             modifier = Modifier.fillMaxWidth(),
-            enabled = if (inputMode == 0 || !hasPin) password.isNotBlank() else pin.length >= 4,
+            enabled = !isVerifying &&
+                (if (inputMode == 0 || !hasPin) password.isNotBlank() else pin.length >= 4),
             colors = ButtonDefaults.buttonColors(
                 containerColor = PrimaryCyan,
                 disabledContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh
@@ -216,7 +209,7 @@ fun LockScreen(
             shape = MaterialTheme.shapes.medium
         ) {
             Text(
-                text = "Unlock",
+                text = if (isVerifying) "Verifying…" else "Unlock",
                 style = MaterialTheme.typography.labelLarge
             )
         }

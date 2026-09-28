@@ -33,6 +33,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -64,7 +65,8 @@ fun ReceiveScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val defaultAddressType by viewModel.defaultAddressType.collectAsState()
-    val supportedTypes = viewModel.getSupportedAddressTypes()
+    val mwebAddresses by viewModel.mwebAddresses.collectAsState()
+    val supportedTypes = viewModel.getReceiveAddressTypes()
 
     var selectedType by remember { mutableStateOf(defaultAddressType) }
     var showTypeMenu by remember { mutableStateOf(false) }
@@ -72,9 +74,19 @@ fun ReceiveScreen(
     val clipboardManager = LocalClipboardManager.current
     val context = LocalContext.current
 
-    // Generate address for selected type
-    val address = remember(selectedType) {
+    // Make sure the daemon is up and the address pool is populated when
+    // Receive opens (idempotent).
+    LaunchedEffect(Unit) { viewModel.ensureMwebReady() }
+
+    // Generate address for selected type. MWEB is not derivable locally: it
+    // comes from the daemon-derived pool and is empty until the pool loads.
+    val localAddress = remember(selectedType) {
         viewModel.generateAddress(selectedType) ?: uiState.address
+    }
+    val address = if (selectedType == AddressType.MWEB) {
+        mwebAddresses.firstOrNull() ?: ""
+    } else {
+        localAddress
     }
 
     Box(
@@ -197,10 +209,28 @@ fun ReceiveScreen(
                         .padding(24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    QrCodeDisplay(
-                        data = address,
-                        size = 200.dp
-                    )
+                    if (address.isEmpty()) {
+                        Box(
+                            modifier = Modifier.size(200.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = if (selectedType == AddressType.MWEB) {
+                                    "Generating MWEB\naddress\u2026"
+                                } else {
+                                    "Generating\u2026"
+                                },
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    } else {
+                        QrCodeDisplay(
+                            data = address,
+                            size = 200.dp
+                        )
+                    }
 
                     Spacer(modifier = Modifier.height(16.dp))
 
@@ -221,7 +251,13 @@ fun ReceiveScreen(
 
                     // Address text
                     Text(
-                        text = address,
+                        text = address.ifEmpty {
+                            if (selectedType == AddressType.MWEB) {
+                                "Generating MWEB address\u2026"
+                            } else {
+                                uiState.address
+                            }
+                        },
                         style = MaterialTheme.typography.bodyMedium,
                         fontFamily = FontFamily.Monospace,
                         color = MaterialTheme.colorScheme.onSurface,
@@ -290,7 +326,8 @@ fun ReceiveScreen(
                         clipboardManager.setText(AnnotatedString(address))
                     },
                     modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(12.dp),
+                    enabled = address.isNotEmpty()
                 ) {
                     Icon(
                         Icons.Filled.ContentCopy,
@@ -313,7 +350,8 @@ fun ReceiveScreen(
                         context.startActivity(shareIntent)
                     },
                     modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(12.dp),
+                    enabled = address.isNotEmpty()
                 ) {
                     Icon(
                         Icons.Filled.Share,
@@ -347,7 +385,10 @@ fun ReceiveScreen(
                     )
                     Spacer(modifier = Modifier.height(8.dp))
 
-                    AddressType.entries.forEach { type ->
+                    val isTestnet =
+                        uiState.network == junkwallet.domain.model.NetworkType.TESTNET
+
+                    supportedTypes.forEach { type ->
                         val info = AddressValidator.getAddressTypeInfo(type)
                         Row(
                             modifier = Modifier
@@ -368,11 +409,11 @@ fun ReceiveScreen(
                             )
                             Text(
                                 text = when (type) {
-                                    AddressType.P2PKH -> "7..."
+                                    AddressType.P2PKH -> if (isTestnet) "m... / n..." else "7..."
                                     AddressType.P2SH_P2WPKH -> "3..."
-                                    AddressType.P2WPKH -> "jc1q..."
-                                    AddressType.P2TR -> "jc1p..."
-                                    AddressType.MWEB -> "jcmweb1..."
+                                    AddressType.P2WPKH -> if (isTestnet) "tjc1q..." else "jc1q..."
+                                    AddressType.P2TR -> if (isTestnet) "tjc1p..." else "jc1p..."
+                                    AddressType.MWEB -> if (isTestnet) "tjcmweb1..." else "jcmweb1..."
                                 },
                                 style = MaterialTheme.typography.bodySmall,
                                 fontFamily = FontFamily.Monospace,
@@ -393,12 +434,14 @@ private fun OutlinedButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     shape: RoundedCornerShape,
+    enabled: Boolean = true,
     content: @Composable () -> Unit
 ) {
     androidx.compose.material3.OutlinedButton(
         onClick = onClick,
         modifier = modifier,
-        shape = shape
+        shape = shape,
+        enabled = enabled
     ) {
         content()
     }

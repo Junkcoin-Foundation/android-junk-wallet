@@ -7,6 +7,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ExperimentalGetImage
+import androidx.camera.core.ImageProxy
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
@@ -38,6 +39,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -55,8 +57,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import android.util.Log
+import com.google.mlkit.vision.barcode.BarcodeScanner
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.common.InputImage
+import java.util.concurrent.atomic.AtomicBoolean
 import junkwallet.ui.theme.Background
 import junkwallet.ui.theme.ObsidianSurface
 import junkwallet.ui.theme.PrimaryCyan
@@ -64,7 +69,8 @@ import junkwallet.ui.theme.TextHighEmphasis
 import junkwallet.ui.theme.TextMuted
 import java.util.concurrent.Executors
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalGetImage::class)
+@OptIn(ExperimentalMaterial3Api::class)
+@Suppress("UnsafeOptInUsageError") // ExperimentalGetImage: lint marker, not a Kotlin @RequiresOptIn
 @Composable
 fun QrScannerScreen(
     onResult: (address: String) -> Unit,
@@ -78,6 +84,20 @@ fun QrScannerScreen(
     var hasScanned by remember { mutableStateOf(false) }
     var camera by remember { mutableStateOf<Camera?>(null) }
     val analysisExecutor = remember { Executors.newSingleThreadExecutor() }
+
+    // ONE scanner client for the whole screen life-cycle. Creating a client per
+    // frame (the previous implementation) starves ML Kit and silently stops
+    // delivering detections — camera preview kept running but nothing scanned.
+    val barcodeScanner: BarcodeScanner = remember { BarcodeScanning.getClient() }
+    val scanHandled = remember { AtomicBoolean(false) }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            runCatching { barcodeScanner.close() }
+            analysisExecutor.shutdown()
+            runCatching { camera?.cameraControl?.enableTorch(false) }
+        }
+    }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -152,31 +172,17 @@ fun QrScannerScreen(
                                 .build()
                                 .also { analysis ->
                                     analysis.setAnalyzer(analysisExecutor) { imageProxy ->
-                                        if (!hasScanned) {
-                                            @androidx.camera.core.ExperimentalGetImage
-                                            val mediaImage = imageProxy.image
-                                            if (mediaImage != null) {
-                                                val image = InputImage.fromMediaImage(
-                                                    mediaImage,
-                                                    imageProxy.imageInfo.rotationDegrees
-                                                )
-                                                val scanner = BarcodeScanning.getClient()
-                                                scanner.process(image)
-                                                    .addOnSuccessListener { barcodes ->
-                                                        val raw = barcodes.firstOrNull()?.rawValue
-                                                        if (raw != null && !hasScanned) {
-                                                            hasScanned = true
-                                                            scanResult = raw
-                                                        }
-                                                    }
-                                                    .addOnCompleteListener {
-                                                        imageProxy.close()
-                                                    }
-                                            } else {
-                                                imageProxy.close()
-                                            }
-                                        } else {
+                                        if (scanHandled.get()) {
                                             imageProxy.close()
+                                            return@setAnalyzer
+                                        }
+                                        processBarcodeFrame(
+                                            scanner = barcodeScanner,
+                                            imageProxy = imageProxy,
+                                            scanHandled = scanHandled
+                                        ) { raw ->
+                                            hasScanned = true
+                                            scanResult = raw
                                         }
                                     }
                                 }
@@ -230,6 +236,39 @@ fun QrScannerScreen(
                 }
             }
         }
+    }
+}
+
+@androidx.camera.core.ExperimentalGetImage
+private fun processBarcodeFrame(
+    scanner: BarcodeScanner,
+    imageProxy: ImageProxy,
+    scanHandled: AtomicBoolean,
+    onDetected: (String) -> Unit
+) {
+    try {
+        val mediaImage = imageProxy.image
+        if (mediaImage == null) {
+            imageProxy.close()
+            return
+        }
+        val image = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
+        scanner.process(image)
+            .addOnSuccessListener { barcodes ->
+                val raw = barcodes.firstOrNull()?.rawValue
+                if (raw != null && scanHandled.compareAndSet(false, true)) {
+                    onDetected(raw)
+                }
+            }
+            .addOnFailureListener { e ->
+                Log.e("QrScanner", "Barcode scan failed: ${e.message}")
+            }
+            .addOnCompleteListener {
+                imageProxy.close()
+            }
+    } catch (t: Throwable) {
+        Log.e("QrScanner", "Barcode analyzer error: ${t.message}")
+        runCatching { imageProxy.close() }
     }
 }
 

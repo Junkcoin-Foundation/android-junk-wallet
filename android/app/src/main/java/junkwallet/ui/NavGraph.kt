@@ -22,8 +22,11 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import junkwallet.data.storage.SettingsStorage
 import junkwallet.data.storage.WalletStorage
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import junkwallet.ui.navigation.BottomNavBar
 import junkwallet.domain.model.TransactionInfo
 import junkwallet.ui.navigation.Screen
@@ -40,7 +43,6 @@ import junkwallet.ui.screens.setup.CreateWalletScreen
 import junkwallet.ui.screens.setup.ImportWalletScreen
 import junkwallet.ui.screens.setup.SetupScreen
 import junkwallet.ui.screens.mweb.MwebScreen
-import junkwallet.ui.screens.mweb.MwebSendScreen
 import junkwallet.ui.viewmodel.WalletViewModel
 import junkwallet.utils.parseQrPaymentData
 
@@ -53,6 +55,13 @@ fun JunkWalletNavHost(
     val hasWallet = remember { walletStorage.hasStoredWallet() }
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
+
+    // ONE WalletViewModel for the whole graph (activity-scoped).
+    // Previously every destination created its own instance via hiltViewModel(),
+    // which meant up to 8 concurrent 45s sync loops, 8 MWEB daemon starts and
+    // stale state when switching network/account in Settings.
+    val walletViewModel: WalletViewModel = hiltViewModel()
+
     val mainRoutes = remember {
         setOf(
             Screen.Dashboard.route,
@@ -111,14 +120,20 @@ fun JunkWalletNavHost(
 
         // ── Lock Screen ──
         composable(Screen.Lock.route) {
-            val walletViewModel: WalletViewModel = hiltViewModel()
             var lockError by remember { mutableStateOf<String?>(null) }
+            var verifying by remember { mutableStateOf(false) }
+            val lockScope = rememberCoroutineScope()
             val context = LocalContext.current
             val activity = context as? androidx.fragment.app.FragmentActivity
 
-            LockScreen(
-                onPasswordVerified = { password ->
-                    val wif = walletStorage.getDecryptedWif(password)
+            // Password/PIN verification runs PBKDF2 (600K iterations): it must
+            // never execute on the main thread, otherwise the app freezes for
+            // seconds and Android kills it with an ANR.
+            fun verifyAndUnlock(verify: suspend () -> String?, wrongMessage: String) {
+                if (verifying) return
+                verifying = true
+                lockScope.launch {
+                    val wif = withContext(Dispatchers.IO) { verify() }
                     if (wif != null) {
                         val address = walletStorage.getAddress() ?: ""
                         walletStorage.saveSessionWif(wif)
@@ -128,35 +143,41 @@ fun JunkWalletNavHost(
                             popUpTo(Screen.Lock.route) { inclusive = true }
                         }
                     } else {
-                        lockError = "Incorrect password"
+                        lockError = wrongMessage
                     }
+                    verifying = false
+                }
+            }
+
+            LockScreen(
+                isVerifying = verifying,
+                onPasswordVerified = { password ->
+                    verifyAndUnlock(
+                        verify = { walletStorage.getDecryptedWif(password) },
+                        wrongMessage = "Incorrect password"
+                    )
                 },
                 onPinVerified = { pin ->
-                    val wif = walletStorage.getDecryptedWifByPin(pin)
-                    if (wif != null) {
-                        val address = walletStorage.getAddress() ?: ""
-                        walletStorage.saveSessionWif(wif)
-                        walletViewModel.unlock(wif, address)
-                        lockError = null
-                        navController.navigate(Screen.Dashboard.route) {
-                            popUpTo(Screen.Lock.route) { inclusive = true }
-                        }
-                    } else {
-                        lockError = "Incorrect PIN"
-                    }
+                    verifyAndUnlock(
+                        verify = { walletStorage.getDecryptedWifByPin(pin) },
+                        wrongMessage = "Incorrect PIN"
+                    )
                 },
                 onBiometricRequested = {
-                    if (activity != null) {
+                    if (activity != null && !verifying) {
                         junkwallet.util.BiometricHelper.showBiometricPrompt(
                             activity = activity,
                             onSuccess = {
-                                // Biometric verified — try to get WIF from session or encrypted storage
+                                // Biometric verified — WIF must already be in
+                                // the session (it is only kept in memory).
                                 val wif = walletStorage.getSessionWif()
                                 if (wif != null) {
-                                    val address = walletStorage.getAddress() ?: ""
-                                    walletViewModel.unlock(wif, address)
-                                    navController.navigate(Screen.Dashboard.route) {
-                                        popUpTo(Screen.Lock.route) { inclusive = true }
+                                    lockScope.launch {
+                                        val address = walletStorage.getAddress() ?: ""
+                                        walletViewModel.unlock(wif, address)
+                                        navController.navigate(Screen.Dashboard.route) {
+                                            popUpTo(Screen.Lock.route) { inclusive = true }
+                                        }
                                     }
                                 } else {
                                     lockError = "Please use password to unlock"
@@ -180,15 +201,24 @@ fun JunkWalletNavHost(
 
         // ── Main Screens ──
         composable(Screen.Dashboard.route) {
-            val walletViewModel: WalletViewModel = hiltViewModel()
             val uiState by walletViewModel.uiState.collectAsState()
             val fiatPrice by walletViewModel.fiatPrice.collectAsState()
             val defaultAddressType by walletViewModel.defaultAddressType.collectAsState()
+            val mwebBalance by walletViewModel.mwebBalance.collectAsState()
 
             LaunchedEffect(uiState.isLocked) {
-                if (uiState.isLocked) {
+                if (uiState.isLocked && currentRoute == Screen.Dashboard.route) {
                     navController.navigate(Screen.Lock.route) {
                         popUpTo(Screen.Dashboard.route) { inclusive = true }
+                    }
+                }
+            }
+
+            // Last account deleted → the wallet is gone, restart at setup.
+            LaunchedEffect(uiState.hasStoredWallet) {
+                if (!uiState.hasStoredWallet && currentRoute == Screen.Dashboard.route) {
+                    navController.navigate(Screen.Setup.route) {
+                        popUpTo(0) { inclusive = true }
                     }
                 }
             }
@@ -216,6 +246,7 @@ fun JunkWalletNavHost(
                 onAccountSelected = { walletViewModel.switchAccount(it) },
                 onAccountRename = { id, name -> walletViewModel.renameAccount(id, name) },
                 onAccountCreate = { walletViewModel.createAccount(it) },
+                onAccountDelete = { walletViewModel.deleteAccount(it) },
                 accounts = uiState.accounts,
                 activeAccountId = uiState.activeAccount?.id ?: "",
                 onTxClick = { txid ->
@@ -237,6 +268,7 @@ fun JunkWalletNavHost(
                     junkwallet.domain.model.NetworkType.TESTNET -> "Testnet"
                 },
                 defaultAddressType = defaultAddressType,
+                mwebBalance = mwebBalance,
                 isLoading = uiState.isLoading,
                 transactions = uiState.transactions,
                 fiatPriceUsd = fiatPrice.usd,
@@ -250,6 +282,8 @@ fun JunkWalletNavHost(
 
         composable(Screen.Send.route) {
             val sendViewModel: junkwallet.ui.viewmodel.SendViewModel = hiltViewModel()
+            val defaultAddressType by walletViewModel.defaultAddressType.collectAsState()
+            val mwebBalance by walletViewModel.mwebBalance.collectAsState()
             SendScreen(
                 onBack = { navController.popBackStack() },
                 onSuccess = { txId ->
@@ -258,13 +292,13 @@ fun JunkWalletNavHost(
                     }
                 },
                 onQrScan = { navController.navigate(Screen.QrScanner.route) },
+                sourceAddressType = defaultAddressType,
+                mwebBalance = mwebBalance,
                 viewModel = sendViewModel
             )
         }
 
         composable(Screen.Receive.route) {
-            val walletViewModel: WalletViewModel = hiltViewModel()
-
             ReceiveScreen(
                 onBack = { navController.popBackStack() },
                 viewModel = walletViewModel
@@ -272,7 +306,6 @@ fun JunkWalletNavHost(
         }
 
         composable(Screen.History.route) {
-            val walletViewModel: WalletViewModel = hiltViewModel()
             val uiState by walletViewModel.uiState.collectAsState()
 
             HistoryScreen(
@@ -302,7 +335,6 @@ fun JunkWalletNavHost(
                 null
             }
 
-            val walletViewModel: WalletViewModel = hiltViewModel()
             val uiState by walletViewModel.uiState.collectAsState()
 
             val tx = selectedTx ?: uiState.transactions.find { it.txid == txid }
@@ -329,7 +361,7 @@ fun JunkWalletNavHost(
         }
 
         composable(Screen.Settings.route) {
-            val walletViewModel: WalletViewModel = hiltViewModel()
+            val settingsScope = rememberCoroutineScope()
             val uiState by walletViewModel.uiState.collectAsState()
             val defaultAddressType by walletViewModel.defaultAddressType.collectAsState()
             val biometricEnabled by settingsStorage.biometricEnabled.collectAsState(initial = false)
@@ -347,6 +379,7 @@ fun JunkWalletNavHost(
                 onNetworkChanged = { walletViewModel.switchNetwork(it) },
                 defaultAddressType = defaultAddressType,
                 onAddressTypeChanged = { walletViewModel.setDefaultAddressType(it) },
+                supportedAddressTypes = walletViewModel.getSupportedAddressTypes(),
                 biometricEnabled = biometricEnabled,
                 onBiometricChanged = {
                     kotlinx.coroutines.MainScope().launch {
@@ -355,10 +388,14 @@ fun JunkWalletNavHost(
                 },
                 hasPin = walletStorage.hasPin(),
                 onPinSetup = { pin ->
-                    // Save PIN: encrypt current WIF with PIN
-                    val wif = walletStorage.getSessionWif()
+                    // Save PIN: encrypt the ROOT key (never the active account
+                    // key — the PIN must always unlock the whole wallet).
+                    // PBKDF2 runs off the main thread.
+                    val wif = walletStorage.getMasterWif() ?: walletStorage.getSessionWif()
                     if (wif != null) {
-                        walletStorage.savePinEncryptedWif(wif, pin)
+                        settingsScope.launch(Dispatchers.IO) {
+                            walletStorage.savePinEncryptedWif(wif, pin)
+                        }
                     }
                 },
                 onPinRemove = { walletStorage.clearPin() },
@@ -380,7 +417,9 @@ fun JunkWalletNavHost(
         }
 
         composable(Screen.QrScanner.route) {
-            val sendEntry = remember(navController) {
+            // Keyed on the current entry: getBackStackEntry must not be called
+            // un-remembered during composition.
+            val sendEntry = remember(navBackStackEntry) {
                 navController.getBackStackEntry(Screen.Send.route)
             }
             val sendViewModel: junkwallet.ui.viewmodel.SendViewModel = hiltViewModel(sendEntry)
@@ -400,11 +439,11 @@ fun JunkWalletNavHost(
 
         // ── MWEB Screens ──
         composable(Screen.Mweb.route) {
-            val walletViewModel: WalletViewModel = hiltViewModel()
             val uiState by walletViewModel.uiState.collectAsState()
+            val defaultAddressType by walletViewModel.defaultAddressType.collectAsState()
 
             LaunchedEffect(uiState.isLocked) {
-                if (uiState.isLocked) {
+                if (uiState.isLocked && currentRoute == Screen.Mweb.route) {
                     navController.navigate(Screen.Lock.route) {
                         popUpTo(Screen.Mweb.route) { inclusive = true }
                     }
@@ -413,31 +452,17 @@ fun JunkWalletNavHost(
 
             MwebScreen(
                 viewModel = walletViewModel,
-                onNavigateToSend = { navController.navigate(Screen.MwebSend.route) },
+                onNavigateToSend = {
+                    // The unified send page spends from the active switcher
+                    // type: make MWEB the source before opening it.
+                    if (defaultAddressType != junkwallet.domain.model.AddressType.MWEB) {
+                        walletViewModel.setDefaultAddressType(
+                            junkwallet.domain.model.AddressType.MWEB
+                        )
+                    }
+                    navController.navigate(Screen.Send.route)
+                },
                 onNavigateToHistory = { navController.navigate(Screen.History.route) }
-            )
-        }
-
-        composable(Screen.MwebSend.route) {
-            val walletViewModel: WalletViewModel = hiltViewModel()
-            val uiState by walletViewModel.uiState.collectAsState()
-
-            LaunchedEffect(uiState.isLocked) {
-                if (uiState.isLocked) {
-                    navController.navigate(Screen.Lock.route) {
-                        popUpTo(Screen.MwebSend.route) { inclusive = true }
-                    }
-                }
-            }
-
-            MwebSendScreen(
-                viewModel = walletViewModel,
-                onBack = { navController.popBackStack() },
-                onSuccess = {
-                    navController.navigate(Screen.Mweb.route) {
-                        popUpTo(Screen.Mweb.route) { inclusive = true }
-                    }
-                }
             )
         }
     } // end NavHost
