@@ -1,6 +1,14 @@
 package junkwallet.ui.screens.receive
 
+import android.content.Intent
+import android.widget.Toast
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,25 +21,31 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -42,7 +56,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
@@ -55,9 +69,20 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import junkwallet.domain.model.AddressType
 import junkwallet.domain.wallet.AddressValidator
 import junkwallet.ui.components.QrCodeDisplay
-import junkwallet.ui.theme.*
+import junkwallet.ui.theme.Background
+import junkwallet.ui.theme.NetworkMainnet
+import junkwallet.ui.theme.NetworkTestnet
+import junkwallet.ui.theme.PrimaryCyan
+import junkwallet.ui.theme.SecondaryEmerald
+import junkwallet.ui.theme.SurfaceContainer
+import junkwallet.ui.theme.SurfaceContainerHigh
+import junkwallet.ui.theme.TertiaryAmber
+import junkwallet.ui.theme.TextHighEmphasis
+import junkwallet.ui.theme.TextMonospace
+import junkwallet.ui.theme.TextMuted
 import junkwallet.ui.viewmodel.WalletViewModel
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReceiveScreen(
     onBack: () -> Unit,
@@ -69,17 +94,24 @@ fun ReceiveScreen(
     val supportedTypes = viewModel.getReceiveAddressTypes()
 
     var selectedType by remember { mutableStateOf(defaultAddressType) }
-    var showTypeMenu by remember { mutableStateOf(false) }
+    var copied by remember { mutableStateOf(false) }
 
     val clipboardManager = LocalClipboardManager.current
     val context = LocalContext.current
 
-    // Make sure the daemon is up and the address pool is populated when
-    // Receive opens (idempotent).
-    LaunchedEffect(Unit) { viewModel.ensureMwebReady() }
+    // Reset copied animation after delay
+    LaunchedEffect(copied) {
+        if (copied) {
+            kotlinx.coroutines.delay(2000)
+            copied = false
+        }
+    }
 
-    // Generate address for selected type. MWEB is not derivable locally: it
-    // comes from the daemon-derived pool and is empty until the pool loads.
+    // Make sure MWEB daemon is running and address pool is populated
+    LaunchedEffect(Unit) {
+        viewModel.ensureMwebReady()
+    }
+
     val localAddress = remember(selectedType) {
         viewModel.generateAddress(selectedType) ?: uiState.address
     }
@@ -89,360 +121,306 @@ fun ReceiveScreen(
         localAddress
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(
-                        MaterialTheme.colorScheme.background,
-                        MaterialTheme.colorScheme.surface
-                    )
+    fun copyAddress() {
+        if (address.isNotEmpty()) {
+            clipboardManager.setText(AnnotatedString(address))
+            copied = true
+            Toast.makeText(context, "Address copied", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    Scaffold(
+        containerColor = Background,
+        topBar = {
+            TopAppBar(
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "Receive",
+                            fontWeight = FontWeight.Bold,
+                            color = TextHighEmphasis
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(
+                                    if (uiState.network == junkwallet.domain.model.NetworkType.MAINNET)
+                                        NetworkMainnet.copy(alpha = 0.15f)
+                                    else
+                                        NetworkTestnet.copy(alpha = 0.15f)
+                                )
+                                .padding(horizontal = 8.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = if (uiState.network == junkwallet.domain.model.NetworkType.MAINNET) "JKC" else "tJKC",
+                                color = if (uiState.network == junkwallet.domain.model.NetworkType.MAINNET) NetworkMainnet else NetworkTestnet,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = TextHighEmphasis
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Background,
+                    titleContentColor = TextHighEmphasis
                 )
             )
-    ) {
+        }
+    ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .padding(padding)
                 .verticalScroll(rememberScrollState())
-                .padding(20.dp)
+                .padding(horizontal = 20.dp, vertical = 8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Header
+            // ── Segmented Address Type Selector ──
             Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                IconButton(onClick = onBack) {
-                    Icon(
-                        Icons.Filled.ArrowBack,
-                        contentDescription = "Back",
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                }
-                Text(
-                    text = "Receive JKC",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onBackground
-                )
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // Address type selector
-            Text(
-                text = "Address Type",
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(bottom = 8.dp)
-            )
-
-            Box {
-                OutlinedButton(
-                    onClick = { showTypeMenu = true },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    val typeInfo = AddressValidator.getAddressTypeInfo(selectedType)
-                    Text(
-                        text = "${typeInfo.icon} ${typeInfo.displayName}",
-                        modifier = Modifier.weight(1f),
-                        textAlign = TextAlign.Start
-                    )
-                    Icon(
-                        Icons.Filled.Check,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                }
-
-                DropdownMenu(
-                    expanded = showTypeMenu,
-                    onDismissRequest = { showTypeMenu = false }
-                ) {
-                    supportedTypes.forEach { type ->
-                        val typeInfo = AddressValidator.getAddressTypeInfo(type)
-                        DropdownMenuItem(
-                            text = {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = "${typeInfo.icon} ${typeInfo.displayName}",
-                                            style = MaterialTheme.typography.bodyLarge
-                                        )
-                                        Text(
-                                            text = typeInfo.description,
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                    if (type == selectedType) {
-                                        Icon(
-                                            Icons.Filled.Check,
-                                            contentDescription = "Selected",
-                                            tint = MaterialTheme.colorScheme.primary
-                                        )
-                                    }
-                                }
-                            },
-                            onClick = {
-                                selectedType = type
-                                showTypeMenu = false
-                            }
-                        )
+                supportedTypes.forEach { type ->
+                    val isSelected = type == selectedType
+                    val typeLabel = when (type) {
+                        AddressType.P2PKH -> "Legacy"
+                        AddressType.P2WPKH -> "SegWit"
+                        AddressType.P2TR -> "Taproot"
+                        AddressType.MWEB -> "MWEB"
+                        AddressType.P2SH_P2WPKH -> "P2SH"
                     }
+                    val isMweb = type == AddressType.MWEB
+
+                    FilterChip(
+                        selected = isSelected,
+                        onClick = { selectedType = type },
+                        label = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                if (isMweb) {
+                                    Icon(
+                                        Icons.Filled.Lock,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(12.dp),
+                                        tint = if (isSelected) TertiaryAmber else TextMuted
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                }
+                                Text(
+                                    text = typeLabel,
+                                    fontSize = 12.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                )
+                            }
+                        },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = if (isMweb) TertiaryAmber.copy(alpha = 0.2f) else PrimaryCyan.copy(alpha = 0.18f),
+                            selectedLabelColor = if (isMweb) TertiaryAmber else PrimaryCyan,
+                            containerColor = SurfaceContainer,
+                            labelColor = TextMuted
+                        ),
+                        border = FilterChipDefaults.filterChipBorder(
+                            enabled = true,
+                            selected = isSelected,
+                            borderColor = if (isSelected) {
+                                if (isMweb) TertiaryAmber else PrimaryCyan
+                            } else Color.Transparent
+                        ),
+                        shape = RoundedCornerShape(10.dp)
+                    )
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(18.dp))
 
-            // QR Code
+            // ── QR Code Card ──
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surface
-                )
+                colors = CardDefaults.cardColors(containerColor = SurfaceContainer),
+                shape = RoundedCornerShape(20.dp)
             ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(24.dp),
+                        .padding(20.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    if (address.isEmpty()) {
-                        Box(
-                            modifier = Modifier.size(200.dp),
-                            contentAlignment = Alignment.Center
+                    AnimatedContent(
+                        targetState = address,
+                        transitionSpec = { fadeIn() togetherWith fadeOut() },
+                        label = "qr_anim"
+                    ) { targetAddress ->
+                        if (targetAddress.isEmpty()) {
+                            Box(
+                                modifier = Modifier
+                                    .size(200.dp)
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .background(SurfaceContainerHigh),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(28.dp),
+                                        color = PrimaryCyan,
+                                        strokeWidth = 2.5.dp
+                                    )
+                                    Spacer(modifier = Modifier.height(10.dp))
+                                    Text(
+                                        text = if (selectedType == AddressType.MWEB) "Syncing MWEB..." else "Generating...",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = TextMuted
+                                    )
+                                }
+                            }
+                        } else {
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .background(Color.White)
+                                    .padding(14.dp)
+                            ) {
+                                QrCodeDisplay(
+                                    data = targetAddress,
+                                    size = 190.dp
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(18.dp))
+
+                    // ── 1-Tap Copyable Address Pill ──
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(SurfaceContainerHigh)
+                            .clickable(enabled = address.isNotEmpty()) { copyAddress() }
+                            .padding(horizontal = 14.dp, vertical = 12.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = if (selectedType == AddressType.MWEB) {
-                                    "Generating MWEB\naddress\u2026"
-                                } else {
-                                    "Generating\u2026"
-                                },
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                textAlign = TextAlign.Center
+                                text = address.ifEmpty { "..." },
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = 12.sp,
+                                color = TextHighEmphasis,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Icon(
+                                imageVector = if (copied) Icons.Filled.Check else Icons.Filled.ContentCopy,
+                                contentDescription = "Copy",
+                                tint = if (copied) SecondaryEmerald else PrimaryCyan,
+                                modifier = Modifier.size(18.dp)
                             )
                         }
-                    } else {
-                        QrCodeDisplay(
-                            data = address,
-                            size = 200.dp
-                        )
                     }
 
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    // Address type badge
+                    // Address Type Badge & Info
+                    Spacer(modifier = Modifier.height(12.dp))
                     val typeInfo = AddressValidator.getAddressTypeInfo(selectedType)
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(text = typeInfo.icon, fontSize = 16.sp)
-                        Spacer(modifier = Modifier.width(8.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
                         Text(
-                            text = typeInfo.displayName,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.primary,
+                            text = "${typeInfo.icon} ${typeInfo.displayName}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (selectedType == AddressType.MWEB) TertiaryAmber else PrimaryCyan,
                             fontWeight = FontWeight.Medium
                         )
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    // Address text
-                    Text(
-                        text = address.ifEmpty {
-                            if (selectedType == AddressType.MWEB) {
-                                "Generating MWEB address\u2026"
-                            } else {
-                                uiState.address
-                            }
-                        },
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontFamily = FontFamily.Monospace,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(horizontal = 8.dp)
-                    )
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    // Warning for address type
-                    when (selectedType) {
-                        AddressType.P2PKH -> {
+                        if (selectedType == AddressType.MWEB) {
+                            Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "Legacy address - higher fees",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                textAlign = TextAlign.Center
-                            )
-                        }
-                        AddressType.P2SH_P2WPKH -> {
-                            Text(
-                                text = "Wrapped SegWit - moderate fees",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                textAlign = TextAlign.Center
-                            )
-                        }
-                        AddressType.P2WPKH -> {
-                            Text(
-                                text = "Native SegWit - lower fees",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.primary,
-                                textAlign = TextAlign.Center
-                            )
-                        }
-                        AddressType.P2TR -> {
-                            Text(
-                                text = "Taproot - lowest fees + privacy",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.tertiary,
-                                textAlign = TextAlign.Center
-                            )
-                        }
-                        AddressType.MWEB -> {
-                            Text(
-                                text = "MimbleWimble - confidential transactions",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.tertiary,
-                                textAlign = TextAlign.Center
+                                text = "· Confidential",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = TextMuted
                             )
                         }
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(20.dp))
 
-            // Action buttons
+            // ── Quick Action Buttons (Copy & Share) ──
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // Copy button
-                OutlinedButton(
-                    onClick = {
-                        clipboardManager.setText(AnnotatedString(address))
-                    },
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(12.dp),
+                Button(
+                    onClick = { copyAddress() },
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(48.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = PrimaryCyan,
+                        contentColor = Color.Black
+                    ),
                     enabled = address.isNotEmpty()
                 ) {
                     Icon(
-                        Icons.Filled.ContentCopy,
+                        imageVector = if (copied) Icons.Filled.Check else Icons.Filled.ContentCopy,
                         contentDescription = null,
                         modifier = Modifier.size(18.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Copy")
+                    Text(
+                        text = if (copied) "Copied" else "Copy",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp
+                    )
                 }
 
-                // Share button
                 OutlinedButton(
                     onClick = {
-                        val sendIntent = android.content.Intent().apply {
-                            action = android.content.Intent.ACTION_SEND
-                            putExtra(android.content.Intent.EXTRA_TEXT, address)
+                        val sendIntent = Intent().apply {
+                            action = Intent.ACTION_SEND
+                            putExtra(Intent.EXTRA_TEXT, address)
                             type = "text/plain"
                         }
-                        val shareIntent = android.content.Intent.createChooser(sendIntent, null)
+                        val shareIntent = Intent.createChooser(sendIntent, null)
                         context.startActivity(shareIntent)
                     },
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(12.dp),
-                    enabled = address.isNotEmpty()
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(48.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    enabled = address.isNotEmpty(),
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = TextHighEmphasis
+                    )
                 ) {
                     Icon(
                         Icons.Filled.Share,
                         contentDescription = null,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(18.dp),
+                        tint = TextHighEmphasis
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Share")
-                }
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // Info card
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)
-                )
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp)
-                ) {
                     Text(
-                        text = "Address Format Info",
-                        style = MaterialTheme.typography.labelLarge,
+                        text = "Share",
                         fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                        fontSize = 14.sp
                     )
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    val isTestnet =
-                        uiState.network == junkwallet.domain.model.NetworkType.TESTNET
-
-                    supportedTypes.forEach { type ->
-                        val info = AddressValidator.getAddressTypeInfo(type)
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = info.icon,
-                                fontSize = 14.sp
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = info.displayName,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                modifier = Modifier.weight(1f)
-                            )
-                            Text(
-                                text = when (type) {
-                                    AddressType.P2PKH -> if (isTestnet) "m... / n..." else "7..."
-                                    AddressType.P2SH_P2WPKH -> "3..."
-                                    AddressType.P2WPKH -> if (isTestnet) "tjc1q..." else "jc1q..."
-                                    AddressType.P2TR -> if (isTestnet) "tjc1p..." else "jc1p..."
-                                    AddressType.MWEB -> if (isTestnet) "tjcmweb1..." else "jcmweb1..."
-                                },
-                                style = MaterialTheme.typography.bodySmall,
-                                fontFamily = FontFamily.Monospace,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
-                            )
-                        }
-                    }
                 }
             }
-
-            Spacer(modifier = Modifier.height(24.dp))
         }
-    }
-}
-
-@Composable
-private fun OutlinedButton(
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    shape: RoundedCornerShape,
-    enabled: Boolean = true,
-    content: @Composable () -> Unit
-) {
-    androidx.compose.material3.OutlinedButton(
-        onClick = onClick,
-        modifier = modifier,
-        shape = shape,
-        enabled = enabled
-    ) {
-        content()
     }
 }

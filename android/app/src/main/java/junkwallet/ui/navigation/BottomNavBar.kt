@@ -1,5 +1,7 @@
 package junkwallet.ui.navigation
 
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -7,10 +9,13 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import androidx.navigation.compose.currentBackStackEntryAsState
-import junkwallet.ui.theme.ObsidianSurface
+import junkwallet.ui.theme.Background
 import junkwallet.ui.theme.PrimaryCyan
 import junkwallet.ui.theme.TextMuted
 
@@ -20,8 +25,10 @@ fun BottomNavBar(navController: NavController) {
     val currentRoute = navBackStackEntry?.destination?.route
 
     NavigationBar(
-        containerColor = ObsidianSurface,
-        contentColor = PrimaryCyan
+        modifier = Modifier.height(64.dp),
+        containerColor = Background,
+        contentColor = PrimaryCyan,
+        tonalElevation = 0.dp
     ) {
         bottomNavItems.forEach { item ->
             val selected = currentRoute == item.screen.route
@@ -29,11 +36,16 @@ fun BottomNavBar(navController: NavController) {
                 icon = {
                     Icon(
                         imageVector = item.icon,
-                        contentDescription = item.label
+                        contentDescription = item.label,
+                        modifier = Modifier.size(20.dp)
                     )
                 },
                 label = {
-                    Text(text = item.label)
+                    Text(
+                        text = item.label,
+                        fontSize = 11.sp,
+                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
+                    )
                 },
                 selected = selected,
                 onClick = {
@@ -52,7 +64,7 @@ fun BottomNavBar(navController: NavController) {
                     selectedTextColor = PrimaryCyan,
                     unselectedIconColor = TextMuted,
                     unselectedTextColor = TextMuted,
-                    indicatorColor = PrimaryCyan.copy(alpha = 0.12f)
+                    indicatorColor = PrimaryCyan.copy(alpha = 0.15f)
                 )
             )
         }

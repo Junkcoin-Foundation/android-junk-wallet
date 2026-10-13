@@ -1,7 +1,10 @@
 package junkwallet.ui.screens.settings
 
 import android.content.Intent
+import android.net.Uri
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -13,11 +16,22 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Fingerprint
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Key
+import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.OpenInNew
+import androidx.compose.material.icons.filled.Password
+import androidx.compose.material.icons.filled.Pin
+import androidx.compose.material.icons.filled.Tag
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -39,24 +53,27 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import junkwallet.domain.model.AddressType
 import junkwallet.domain.model.NetworkType
 import junkwallet.domain.wallet.AddressValidator
-import junkwallet.ui.theme.Background
 import junkwallet.ui.components.PinBoxesInput
+import junkwallet.ui.theme.Background
 import junkwallet.ui.theme.ErrorCrimson
 import junkwallet.ui.theme.NetworkMainnet
 import junkwallet.ui.theme.NetworkTestnet
@@ -64,8 +81,10 @@ import junkwallet.ui.theme.PrimaryCyan
 import junkwallet.ui.theme.SecondaryEmerald
 import junkwallet.ui.theme.SurfaceContainer
 import junkwallet.ui.theme.SurfaceContainerHigh
+import junkwallet.ui.theme.TertiaryAmber
 import junkwallet.ui.theme.TextHighEmphasis
 import junkwallet.ui.theme.TextMuted
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -77,7 +96,6 @@ fun SettingsScreen(
     onNetworkChanged: (NetworkType) -> Unit = {},
     defaultAddressType: AddressType = AddressType.P2PKH,
     onAddressTypeChanged: (AddressType) -> Unit = {},
-    /** Address types usable on the current network (MWEB is not derivable yet). */
     supportedAddressTypes: List<AddressType> = AddressType.entries,
     biometricEnabled: Boolean = false,
     onBiometricChanged: (Boolean) -> Unit = {},
@@ -96,9 +114,7 @@ fun SettingsScreen(
     if (showChangePasswordDialog) {
         ChangePasswordDialog(
             onDismiss = { showChangePasswordDialog = false },
-            onPasswordChanged = {
-                showChangePasswordDialog = false
-            },
+            onPasswordChanged = { showChangePasswordDialog = false },
             onChangePassword = onChangePassword
         )
     }
@@ -122,10 +138,20 @@ fun SettingsScreen(
         containerColor = Background,
         topBar = {
             TopAppBar(
-                title = { Text("Settings") },
+                title = {
+                    Text(
+                        text = "Settings",
+                        fontWeight = FontWeight.Bold,
+                        color = TextHighEmphasis
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = TextHighEmphasis
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -139,90 +165,76 @@ fun SettingsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(16.dp)
                 .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp, vertical = 8.dp)
         ) {
-            // ── Security Section ──
-            SectionHeader("Security")
-
+            // ── 1. Security Group ──
+            SectionTitle("Security")
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = SurfaceContainer),
-                shape = MaterialTheme.shapes.large
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = SurfaceContainer)
             ) {
                 Column {
-                    // Fingerprint toggle
-                    SettingToggle(
-                        title = "Fingerprint Unlock",
-                        subtitle = "Use fingerprint to unlock wallet",
+                    CompactSettingToggle(
+                        icon = Icons.Filled.Fingerprint,
+                        iconTint = PrimaryCyan,
+                        title = "Biometric Unlock",
                         checked = biometricEnabled,
                         onCheckedChange = onBiometricChanged
                     )
-
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-
-                    // Change Password
-                    SettingClickable(
+                    Divider()
+                    CompactSettingRow(
+                        icon = Icons.Filled.Password,
+                        iconTint = SecondaryEmerald,
                         title = "Change Password",
-                        subtitle = "Change your wallet password",
                         onClick = { showChangePasswordDialog = true }
                     )
-
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-
-                    // PIN Lock
-                    SettingClickable(
-                        title = "PIN Lock",
-                        subtitle = if (hasPin) "Change or remove PIN" else "Set up PIN for quick unlock",
+                    Divider()
+                    CompactSettingRow(
+                        icon = Icons.Filled.Pin,
+                        iconTint = TertiaryAmber,
+                        title = "PIN Code",
+                        trailingText = if (hasPin) "Active" else "Off",
+                        trailingTextColor = if (hasPin) SecondaryEmerald else TextMuted,
                         onClick = { showPinDialog = true }
                     )
-
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-
-                    // Key Vault
-                    SettingClickable(
-                        title = "Key Vault",
-                        subtitle = "Export or import private keys",
+                    Divider()
+                    CompactSettingRow(
+                        icon = Icons.Filled.Key,
+                        iconTint = PrimaryCyan,
+                        title = "Key Vault (Private Keys)",
                         onClick = onKeyVault
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(20.dp))
 
-            // ── Address Type Section ──
-            SectionHeader("Address Type")
-
+            // ── 2. Preferences & Network Group ──
+            SectionTitle("Preferences")
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = SurfaceContainer),
-                shape = MaterialTheme.shapes.large
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = SurfaceContainer)
             ) {
                 Column {
-                    // Address type selector
+                    // Address type
                     Box {
-                        SettingClickable(
-                            title = "Default Address Type",
-                            subtitle = "Choose which address type to generate",
-                            trailing = {
-                                Text(
-                                    text = when (defaultAddressType) {
-                                        AddressType.P2PKH -> "Legacy"
-                                        AddressType.P2SH_P2WPKH -> "Wrapped SegWit"
-                                        AddressType.P2WPKH -> "Native SegWit"
-                                        AddressType.P2TR -> "Taproot"
-                                        AddressType.MWEB -> "MimbleWimble"
-                                    },
-                                    style = MaterialTheme.typography.labelLarge,
-                                    color = when (defaultAddressType) {
-                                        AddressType.P2PKH -> TextMuted
-                                        AddressType.P2SH_P2WPKH -> SecondaryEmerald
-                                        AddressType.P2WPKH -> PrimaryCyan
-                                        AddressType.P2TR -> MaterialTheme.colorScheme.tertiary
-                                        AddressType.MWEB -> MaterialTheme.colorScheme.tertiary
-                                    }
-                                )
-                            },
+                        val typeLabel = when (defaultAddressType) {
+                            AddressType.P2PKH -> "Legacy"
+                            AddressType.P2SH_P2WPKH -> "Wrapped"
+                            AddressType.P2WPKH -> "SegWit"
+                            AddressType.P2TR -> "Taproot"
+                            AddressType.MWEB -> "MWEB"
+                        }
+
+                        CompactSettingRow(
+                            icon = Icons.Filled.Tag,
+                            iconTint = PrimaryCyan,
+                            title = "Address Format",
+                            trailingText = typeLabel,
+                            trailingTextColor = PrimaryCyan,
                             onClick = { showAddressTypeMenu = true }
                         )
 
@@ -231,24 +243,25 @@ fun SettingsScreen(
                             onDismissRequest = { showAddressTypeMenu = false }
                         ) {
                             supportedAddressTypes.forEach { type ->
-                                val typeInfo = AddressValidator.getAddressTypeInfo(type)
+                                val info = AddressValidator.getAddressTypeInfo(type)
                                 DropdownMenuItem(
                                     text = {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Column {
-                                                Text(
-                                                    text = "${typeInfo.icon} ${typeInfo.displayName}",
-                                                    style = MaterialTheme.typography.bodyLarge
-                                                )
-                                                Text(
-                                                    text = typeInfo.description,
-                                                    style = MaterialTheme.typography.bodySmall,
-                                                    color = TextMuted
-                                                )
-                                            }
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = "${info.icon} ${info.displayName}",
+                                                modifier = Modifier.weight(1f),
+                                                fontSize = 14.sp
+                                            )
                                             if (type == defaultAddressType) {
-                                                Spacer(modifier = Modifier.weight(1f))
-                                                Icon(Icons.Filled.Check, "Selected", tint = PrimaryCyan)
+                                                Icon(
+                                                    Icons.Filled.Check,
+                                                    contentDescription = null,
+                                                    tint = PrimaryCyan,
+                                                    modifier = Modifier.size(18.dp)
+                                                )
                                             }
                                         }
                                     },
@@ -261,82 +274,16 @@ fun SettingsScreen(
                         }
                     }
 
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    Divider()
 
-                    // Address type info
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text(
-                            text = "Fee Comparison",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = TextMuted
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        supportedAddressTypes.forEach { type ->
-                            val typeInfo = AddressValidator.getAddressTypeInfo(type)
-                            val feeLevelText = when (typeInfo.feeLevel) {
-                                AddressValidator.FeeLevel.HIGH -> "High"
-                                AddressValidator.FeeLevel.MEDIUM -> "Medium"
-                                AddressValidator.FeeLevel.LOW -> "Low"
-                                AddressValidator.FeeLevel.LOWEST -> "Lowest"
-                            }
-                            val feeLevelColor = when (typeInfo.feeLevel) {
-                                AddressValidator.FeeLevel.HIGH -> ErrorCrimson
-                                AddressValidator.FeeLevel.MEDIUM -> TextMuted
-                                AddressValidator.FeeLevel.LOW -> SecondaryEmerald
-                                AddressValidator.FeeLevel.LOWEST -> PrimaryCyan
-                            }
-
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = "${typeInfo.icon} ${typeInfo.displayName}",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = if (type == defaultAddressType) PrimaryCyan else TextMuted,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                Text(
-                                    text = feeLevelText,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = feeLevelColor,
-                                    fontWeight = if (type == defaultAddressType) FontWeight.Bold else FontWeight.Normal
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            // ── Network Section ──
-            SectionHeader("Network")
-
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = SurfaceContainer),
-                shape = MaterialTheme.shapes.large
-            ) {
-                Column {
                     // Network selector
                     Box {
-                        SettingClickable(
+                        CompactSettingRow(
+                            icon = Icons.Filled.Language,
+                            iconTint = if (currentNetwork == NetworkType.MAINNET) NetworkMainnet else NetworkTestnet,
                             title = "Network",
-                            subtitle = when (currentNetwork) {
-                                NetworkType.MAINNET -> "Mainnet · junk-api.s3na.xyz"
-                                NetworkType.TESTNET -> "Testnet · jkc-testnet-api.s3na.xyz"
-                            },
-                            trailing = {
-                                Text(
-                                    text = if (currentNetwork == NetworkType.MAINNET) "Mainnet" else "Testnet",
-                                    style = MaterialTheme.typography.labelLarge,
-                                    color = if (currentNetwork == NetworkType.MAINNET) NetworkMainnet else NetworkTestnet
-                                )
-                            },
+                            trailingText = if (currentNetwork == NetworkType.MAINNET) "Mainnet" else "Testnet",
+                            trailingTextColor = if (currentNetwork == NetworkType.MAINNET) NetworkMainnet else NetworkTestnet,
                             onClick = { showNetworkMenu = true }
                         )
 
@@ -347,10 +294,9 @@ fun SettingsScreen(
                             DropdownMenuItem(
                                 text = {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text("Mainnet")
+                                        Text("Mainnet", modifier = Modifier.weight(1f))
                                         if (currentNetwork == NetworkType.MAINNET) {
-                                            Spacer(modifier = Modifier.weight(1f))
-                                            Icon(Icons.Filled.Check, "Selected", tint = PrimaryCyan)
+                                            Icon(Icons.Filled.Check, null, tint = PrimaryCyan, modifier = Modifier.size(18.dp))
                                         }
                                     }
                                 },
@@ -362,10 +308,9 @@ fun SettingsScreen(
                             DropdownMenuItem(
                                 text = {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text("Testnet")
+                                        Text("Testnet", modifier = Modifier.weight(1f))
                                         if (currentNetwork == NetworkType.TESTNET) {
-                                            Spacer(modifier = Modifier.weight(1f))
-                                            Icon(Icons.Filled.Check, "Selected", tint = PrimaryCyan)
+                                            Icon(Icons.Filled.Check, null, tint = PrimaryCyan, modifier = Modifier.size(18.dp))
                                         }
                                     }
                                 },
@@ -377,111 +322,182 @@ fun SettingsScreen(
                         }
                     }
 
-                    // Explorer link
-                    SettingClickable(
+                    Divider()
+
+                    // Explorer
+                    CompactSettingRow(
+                        icon = Icons.Filled.OpenInNew,
+                        iconTint = TextMuted,
                         title = "Block Explorer",
-                        subtitle = if (currentNetwork == NetworkType.TESTNET) {
-                            "explorer.junk-coin.com/testnet"
-                        } else {
-                            "explorer.junk-coin.com"
-                        },
+                        trailingIcon = Icons.Filled.OpenInNew,
                         onClick = {
                             val url = if (currentNetwork == NetworkType.TESTNET) {
                                 "https://explorer.junk-coin.com/testnet"
                             } else {
                                 "https://explorer.junk-coin.com"
                             }
-                            val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url))
+                            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
                             context.startActivity(intent)
                         }
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(20.dp))
 
-            // ── About Section ──
-            SectionHeader("About")
-
+            // ── 3. About & System Group ──
+            SectionTitle("About")
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = SurfaceContainer),
-                shape = MaterialTheme.shapes.large
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = SurfaceContainer)
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(modifier = Modifier.fillMaxWidth()) {
-                        Text("Version", style = MaterialTheme.typography.bodyMedium, color = TextMuted)
-                        Spacer(modifier = Modifier.weight(1f))
-                        Text(versionName, style = MaterialTheme.typography.bodyMedium, color = TextHighEmphasis)
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row(modifier = Modifier.fillMaxWidth()) {
-                        Text("Network", style = MaterialTheme.typography.bodyMedium, color = TextMuted)
-                        Spacer(modifier = Modifier.weight(1f))
-                        Text(
-                            if (currentNetwork == NetworkType.MAINNET) "Mainnet" else "Testnet",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = TextHighEmphasis
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row(modifier = Modifier.fillMaxWidth()) {
-                        Text("Coin Type", style = MaterialTheme.typography.bodyMedium, color = TextMuted)
-                        Spacer(modifier = Modifier.weight(1f))
-                        Text("JKC (Scrypt)", style = MaterialTheme.typography.bodyMedium, color = TextHighEmphasis)
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Row(modifier = Modifier.fillMaxWidth()) {
-                        Text("Address Types", style = MaterialTheme.typography.bodyMedium, color = TextMuted)
-                        Spacer(modifier = Modifier.weight(1f))
-                        Text("P2PKH, P2SH-P2WPKH, P2WPKH, P2TR", style = MaterialTheme.typography.bodySmall, color = TextHighEmphasis)
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // ── Lock Wallet ──
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onLock() },
-                colors = CardDefaults.cardColors(containerColor = ErrorCrimson.copy(alpha = 0.12f)),
-                shape = MaterialTheme.shapes.large
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    horizontalArrangement = androidx.compose.foundation.layout.Arrangement.Center
-                ) {
-                    Text(
-                        text = "Lock Wallet",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = ErrorCrimson
+                Column {
+                    CompactSettingRow(
+                        icon = Icons.Filled.Info,
+                        iconTint = TextMuted,
+                        title = "Version",
+                        trailingText = "v$versionName",
+                        trailingTextColor = TextHighEmphasis,
+                        hasChevron = false,
+                        onClick = {}
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // ── 4. Lock Wallet Button ──
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .clickable { onLock() },
+                colors = CardDefaults.cardColors(containerColor = ErrorCrimson.copy(alpha = 0.12f))
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 14.dp, horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Filled.Lock,
+                        contentDescription = null,
+                        tint = ErrorCrimson,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Lock Wallet",
+                        color = ErrorCrimson,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
         }
     }
 }
 
 @Composable
-private fun SectionHeader(title: String) {
+private fun SectionTitle(title: String) {
     Text(
         text = title,
-        style = MaterialTheme.typography.headlineSmall,
-        color = TextHighEmphasis
+        fontSize = 12.sp,
+        fontWeight = FontWeight.SemiBold,
+        color = TextMuted,
+        modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
     )
-    Spacer(modifier = Modifier.height(12.dp))
 }
 
 @Composable
-private fun SettingToggle(
+private fun Divider() {
+    HorizontalDivider(
+        color = SurfaceContainerHigh,
+        thickness = 0.8.dp,
+        modifier = Modifier.padding(start = 54.dp)
+    )
+}
+
+@Composable
+private fun CompactSettingRow(
+    icon: ImageVector,
+    iconTint: Color,
     title: String,
-    subtitle: String,
+    trailingText: String? = null,
+    trailingTextColor: Color = TextMuted,
+    trailingIcon: ImageVector? = null,
+    hasChevron: Boolean = true,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(34.dp)
+                .clip(CircleShape)
+                .background(iconTint.copy(alpha = 0.14f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = iconTint,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+
+        Spacer(modifier = Modifier.width(12.dp))
+
+        Text(
+            text = title,
+            fontSize = 14.sp,
+            color = TextHighEmphasis,
+            modifier = Modifier.weight(1f)
+        )
+
+        if (trailingText != null) {
+            Text(
+                text = trailingText,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Medium,
+                color = trailingTextColor
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+        }
+
+        if (trailingIcon != null) {
+            Icon(
+                imageVector = trailingIcon,
+                contentDescription = null,
+                tint = TextMuted,
+                modifier = Modifier.size(16.dp)
+            )
+        } else if (hasChevron) {
+            Icon(
+                Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = TextMuted,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun CompactSettingToggle(
+    icon: ImageVector,
+    iconTint: Color,
+    title: String,
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit
 ) {
@@ -489,21 +505,33 @@ private fun SettingToggle(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onCheckedChange(!checked) }
-            .padding(16.dp),
+            .padding(horizontal = 14.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.bodyLarge,
-                color = TextHighEmphasis
-            )
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = TextMuted
+        Box(
+            modifier = Modifier
+                .size(34.dp)
+                .clip(CircleShape)
+                .background(iconTint.copy(alpha = 0.14f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = iconTint,
+                modifier = Modifier.size(18.dp)
             )
         }
+
+        Spacer(modifier = Modifier.width(12.dp))
+
+        Text(
+            text = title,
+            fontSize = 14.sp,
+            color = TextHighEmphasis,
+            modifier = Modifier.weight(1f)
+        )
+
         Switch(
             checked = checked,
             onCheckedChange = onCheckedChange,
@@ -512,44 +540,6 @@ private fun SettingToggle(
                 checkedTrackColor = PrimaryCyan.copy(alpha = 0.3f)
             )
         )
-    }
-}
-
-@Composable
-private fun SettingClickable(
-    title: String,
-    subtitle: String,
-    trailing: @Composable (() -> Unit)? = null,
-    onClick: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(16.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.bodyLarge,
-                color = TextHighEmphasis
-            )
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = TextMuted
-            )
-        }
-        if (trailing != null) {
-            trailing()
-        } else {
-            Icon(
-                Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                "Open",
-                tint = TextMuted
-            )
-        }
     }
 }
 
@@ -563,7 +553,7 @@ private fun PinSetupDialog(
     var pin by remember { mutableStateOf("") }
     var confirmPin by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
-    var step by remember { mutableIntStateOf(0) } // 0 = enter new pin, 1 = confirm pin
+    var step by remember { mutableIntStateOf(0) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -576,24 +566,16 @@ private fun PinSetupDialog(
         },
         text = {
             Column {
-                if (hasPin && step == 0) {
-                    Text(
-                        text = "Enter new 4-6 digit PIN",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = TextMuted
-                    )
-                } else if (step == 0) {
-                    Text(
-                        text = "Enter a 4-6 digit PIN for quick unlock",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = TextMuted
-                    )
-                }
+                Text(
+                    text = if (hasPin && step == 0) "Enter new 4-6 digit PIN"
+                    else if (step == 0) "Enter a 4-6 digit PIN for quick unlock"
+                    else "Re-enter your PIN to confirm",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TextMuted
+                )
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // One box per digit; key(step) so the confirm step starts
-                // fresh and re-focuses the keyboard.
                 key(step) {
                     PinBoxesInput(
                         pin = if (step == 0) pin else confirmPin,
@@ -665,7 +647,7 @@ private fun ChangePasswordDialog(
     var newPassword by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
-    var step by remember { mutableIntStateOf(0) } // 0 = current password, 1 = new password, 2 = confirm
+    var step by remember { mutableIntStateOf(0) }
     var busy by remember { mutableStateOf(false) }
     val dialogScope = rememberCoroutineScope()
 
@@ -675,8 +657,8 @@ private fun ChangePasswordDialog(
         title = {
             Text(
                 text = when (step) {
-                    0 -> "Enter Current Password"
-                    1 -> "Enter New Password"
+                    0 -> "Current Password"
+                    1 -> "New Password"
                     else -> "Confirm New Password"
                 },
                 color = TextHighEmphasis
@@ -772,14 +754,9 @@ private fun ChangePasswordDialog(
                                     newPassword = ""
                                     confirmPassword = ""
                                 } else if (!busy) {
-                                    // Two PBKDF2 runs (decrypt + re-encrypt):
-                                    // keep them off the main thread.
                                     busy = true
                                     dialogScope.launch {
-                                        val success = onChangePassword(
-                                            currentPassword,
-                                            newPassword
-                                        )
+                                        val success = onChangePassword(currentPassword, newPassword)
                                         busy = false
                                         if (success) {
                                             onPasswordChanged()
@@ -803,5 +780,3 @@ private fun ChangePasswordDialog(
         dismissButton = null
     )
 }
-
-

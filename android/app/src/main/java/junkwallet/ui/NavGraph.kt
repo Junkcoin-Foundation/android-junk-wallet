@@ -232,6 +232,11 @@ fun JunkWalletNavHost(
                         popUpTo(Screen.Dashboard.route) { inclusive = true }
                     }
                 },
+                onScanQr = {
+                    navController.navigate(Screen.Send.route)
+                    navController.navigate(Screen.QrScanner.route)
+                },
+                onKeyVault = { navController.navigate(Screen.KeyVault.route) },
                 onRefresh = { walletViewModel.forceRefresh() },
                 onNetworkToggle = {
                     val targetNetwork = when (uiState.network) {

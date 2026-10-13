@@ -1,6 +1,9 @@
 package junkwallet.ui.screens.dashboard
 
-import androidx.compose.foundation.BorderStroke
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -17,19 +20,23 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Key
+import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.Wallet
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -40,7 +47,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -55,12 +61,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import junkwallet.R
 import junkwallet.domain.model.AddressType
 import junkwallet.domain.model.FeeEstimates
@@ -73,13 +80,11 @@ import junkwallet.ui.theme.PrimaryCyan
 import junkwallet.ui.theme.SecondaryEmerald
 import junkwallet.ui.theme.SurfaceContainer
 import junkwallet.ui.theme.SurfaceContainerHigh
-import junkwallet.ui.theme.SurfaceContainerLow
 import junkwallet.ui.theme.TextHighEmphasis
 import junkwallet.ui.theme.TextMonospace
 import junkwallet.ui.theme.TextMuted
 import junkwallet.ui.theme.TertiaryAmber
 import junkwallet.ui.theme.TxOutgoing
-
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -89,6 +94,8 @@ fun DashboardScreen(
     onHistory: () -> Unit,
     onSettings: () -> Unit,
     onLock: () -> Unit,
+    onScanQr: () -> Unit = {},
+    onKeyVault: () -> Unit = {},
     onRefresh: () -> Unit = {},
     onNetworkToggle: () -> Unit = {},
     onAddressTypeChanged: (AddressType) -> Unit = {},
@@ -96,7 +103,7 @@ fun DashboardScreen(
     onAccountRename: (String, String) -> Unit = { _, _ -> },
     onAccountCreate: (String) -> Unit = {},
     onAccountDelete: (String) -> Unit = {},
-    accounts: List<junkwallet.domain.model.WalletAccount> = emptyList(),
+    accounts: List<WalletAccount> = emptyList(),
     activeAccountId: String = "",
     onTxClick: (String) -> Unit,
     confirmedBalance: Long = 0,
@@ -116,16 +123,27 @@ fun DashboardScreen(
     onErrorDismiss: () -> Unit = {},
     lastSyncedText: String = "Never"
 ) {
-    val clipboard = LocalClipboardManager.current
+    val context = LocalContext.current
     val isMainnet = networkName.lowercase().contains("main")
-    // When MWEB is the active type, show its daemon address (the stored
-    // transparent address keeps syncing in the background).
     val displayedAddress = if (defaultAddressType == AddressType.MWEB) {
         allAddresses[AddressType.MWEB.name] ?: address
     } else {
         address
     }
     val networkColor = if (isMainnet) NetworkMainnet else NetworkTestnet
+
+    var showAccountMenu by remember { mutableStateOf(false) }
+    var accountToDelete by remember { mutableStateOf<WalletAccount?>(null) }
+    val activeAccount = accounts.find { it.id == activeAccountId }
+
+    fun copyAddress(addr: String) {
+        if (addr.isNotBlank()) {
+            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            val clip = ClipData.newPlainText("Junkcoin Address", addr)
+            clipboard.setPrimaryClip(clip)
+            Toast.makeText(context, "Address copied", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     Scaffold(
         containerColor = Background,
@@ -139,29 +157,32 @@ fun DashboardScreen(
                             modifier = Modifier.size(24.dp)
                         )
                         Spacer(modifier = Modifier.width(8.dp))
-                                // Account dropdown
-                                var showAccountMenu by remember { mutableStateOf(false) }
-                                var accountToDelete by remember { mutableStateOf<WalletAccount?>(null) }
-                                val activeAccount = accounts.find { it.id == activeAccountId }
+
+                        // Compact Account Selector Pill
                         Box {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.clickable { showAccountMenu = true }
+                                modifier = Modifier
+                                    .clip(MaterialTheme.shapes.small)
+                                    .clickable { showAccountMenu = true }
+                                    .background(SurfaceContainerHigh.copy(alpha = 0.6f))
+                                    .padding(horizontal = 8.dp, vertical = 4.dp)
                             ) {
                                 Text(
                                     text = activeAccount?.name ?: "Account",
-                                    style = MaterialTheme.typography.titleLarge,
+                                    style = MaterialTheme.typography.titleMedium,
                                     color = TextHighEmphasis,
                                     fontWeight = FontWeight.Bold
                                 )
-                                Spacer(modifier = Modifier.width(4.dp))
+                                Spacer(modifier = Modifier.width(2.dp))
                                 Icon(
                                     Icons.Filled.ArrowDropDown,
                                     contentDescription = "Select account",
                                     tint = TextMuted,
-                                    modifier = Modifier.size(20.dp)
+                                    modifier = Modifier.size(18.dp)
                                 )
                             }
+
                             DropdownMenu(
                                 expanded = showAccountMenu,
                                 onDismissRequest = { showAccountMenu = false }
@@ -250,14 +271,14 @@ fun DashboardScreen(
                     }
                 },
                 actions = {
-                    // Network badge pill — tap to toggle mainnet/testnet
+                    // Global Network Pill (Compact status indicator)
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier
                             .clip(MaterialTheme.shapes.extraLarge)
                             .clickable(onClick = onNetworkToggle)
                             .background(networkColor.copy(alpha = 0.12f))
-                            .padding(horizontal = 10.dp, vertical = 5.dp)
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
                     ) {
                         Box(
                             modifier = Modifier
@@ -265,30 +286,21 @@ fun DashboardScreen(
                                 .clip(CircleShape)
                                 .background(networkColor)
                         )
-                        Spacer(modifier = Modifier.width(5.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
                         Text(
                             text = networkName.uppercase(),
                             style = MaterialTheme.typography.labelSmall,
                             color = networkColor,
                             fontWeight = FontWeight.Bold
                         )
-                        Spacer(modifier = Modifier.width(3.dp))
+                        Spacer(modifier = Modifier.width(2.dp))
                         Icon(
                             Icons.Filled.SwapHoriz,
                             contentDescription = "Switch network",
                             tint = networkColor,
                             modifier = Modifier.size(12.dp)
                         )
-                        if (blockHeight > 0) {
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = "#$blockHeight",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = networkColor.copy(alpha = 0.65f)
-                            )
-                        }
                     }
-                    Spacer(modifier = Modifier.width(2.dp))
 
                     // Refresh
                     IconButton(onClick = onRefresh, enabled = !isLoading) {
@@ -317,13 +329,13 @@ fun DashboardScreen(
                 .fillMaxSize()
                 .padding(padding)
                 .padding(horizontal = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            item { Spacer(modifier = Modifier.height(4.dp)) }
+            item { Spacer(modifier = Modifier.height(2.dp)) }
 
-            // ── Balance Card ──
+            // ── Hero Balance Card (Compact & Minimalist) ──
             item {
-                BalanceCard(
+                BalanceHeroCard(
                     confirmedBalance = confirmedBalance,
                     unconfirmedBalance = unconfirmedBalance,
                     address = displayedAddress,
@@ -331,7 +343,7 @@ fun DashboardScreen(
                     fiatPriceUsd = fiatPriceUsd,
                     defaultAddressType = defaultAddressType,
                     mwebBalance = mwebBalance,
-                    onCopyAddress = { clipboard.setText(AnnotatedString(displayedAddress)) },
+                    onCopyAddress = { copyAddress(displayedAddress) },
                     onAddressTypeChanged = onAddressTypeChanged
                 )
             }
@@ -349,7 +361,7 @@ fun DashboardScreen(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(12.dp),
+                                .padding(10.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
@@ -366,58 +378,60 @@ fun DashboardScreen(
                                 modifier = Modifier.weight(1f)
                             )
                             Text(
-                                text = "Dismiss",
-                                style = MaterialTheme.typography.labelSmall,
+                                text = "✕",
+                                style = MaterialTheme.typography.titleMedium,
                                 color = TertiaryAmber,
                                 modifier = Modifier
-                                    .clip(MaterialTheme.shapes.extraLarge)
+                                    .clip(CircleShape)
                                     .clickable(onClick = onErrorDismiss)
-                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                                    .padding(horizontal = 8.dp, vertical = 2.dp)
                             )
                         }
                     }
                 }
             }
 
-            // ── Action Buttons ──
+            // ── Quick Action Bar (4 Compact Circle Actions) ──
             item {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Button(
-                        onClick = onSend,
-                        modifier = Modifier.weight(1f).height(52.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = PrimaryCyan),
-                        shape = MaterialTheme.shapes.medium
-                    ) {
-                        Icon(
-                            Icons.Filled.ArrowUpward, "Send",
-                            modifier = Modifier.size(18.dp),
-                            tint = Color(0xFF003640)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Send", color = Color(0xFF003640), fontWeight = FontWeight.Bold)
-                    }
-
-                    OutlinedButton(
-                        onClick = onReceive,
-                        modifier = Modifier.weight(1f).height(52.dp),
-                        shape = MaterialTheme.shapes.medium,
-                        border = BorderStroke(1.dp, SurfaceContainerHigh)
-                    ) {
-                        Icon(
-                            Icons.Filled.ArrowDownward, "Receive",
-                            modifier = Modifier.size(18.dp),
-                            tint = SecondaryEmerald
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Receive", color = SecondaryEmerald, fontWeight = FontWeight.Medium)
-                    }
+                    QuickActionButton(
+                        icon = Icons.Filled.ArrowUpward,
+                        label = "Send",
+                        containerColor = PrimaryCyan,
+                        contentColor = Color(0xFF003640),
+                        onClick = onSend
+                    )
+                    QuickActionButton(
+                        icon = Icons.Filled.ArrowDownward,
+                        label = "Receive",
+                        containerColor = SecondaryEmerald.copy(alpha = 0.18f),
+                        contentColor = SecondaryEmerald,
+                        onClick = onReceive
+                    )
+                    QuickActionButton(
+                        icon = Icons.Filled.QrCodeScanner,
+                        label = "Scan",
+                        containerColor = SurfaceContainerHigh,
+                        contentColor = PrimaryCyan,
+                        onClick = onScanQr
+                    )
+                    QuickActionButton(
+                        icon = Icons.Filled.Key,
+                        label = "Vault",
+                        containerColor = SurfaceContainerHigh,
+                        contentColor = TextHighEmphasis,
+                        onClick = onKeyVault
+                    )
                 }
             }
 
-            // ── Recent Activity header ──
+            // ── Activity Section Header ──
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -425,49 +439,57 @@ fun DashboardScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Recent Activity",
+                        text = "Activity",
                         style = MaterialTheme.typography.titleMedium,
                         color = TextHighEmphasis,
                         fontWeight = FontWeight.SemiBold
                     )
-                    Text(
-                        text = "View all →",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = PrimaryCyan,
-                        modifier = Modifier.clickable(onClick = onHistory)
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .clip(MaterialTheme.shapes.small)
+                            .clickable(onClick = onHistory)
+                            .padding(4.dp)
+                    ) {
+                        Text(
+                            text = "All",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = PrimaryCyan
+                        )
+                        Spacer(modifier = Modifier.width(2.dp))
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowForward,
+                            contentDescription = "View all",
+                            tint = PrimaryCyan,
+                            modifier = Modifier.size(12.dp)
+                        )
+                    }
                 }
             }
 
-            // ── Transactions ──
+            // ── Transactions List (Compact) ──
             if (transactions.isEmpty()) {
                 item {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         colors = CardDefaults.cardColors(containerColor = SurfaceContainer),
-                        shape = MaterialTheme.shapes.large
+                        shape = MaterialTheme.shapes.medium
                     ) {
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(32.dp),
+                                .padding(24.dp),
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Icon(
                                 Icons.Filled.Wallet,
                                 contentDescription = null,
                                 tint = TextMuted,
-                                modifier = Modifier.size(44.dp)
+                                modifier = Modifier.size(36.dp)
                             )
-                            Spacer(modifier = Modifier.height(12.dp))
+                            Spacer(modifier = Modifier.height(8.dp))
                             Text(
                                 "No transactions yet",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = TextHighEmphasis
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                "Send or receive JKC to get started",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = TextMuted
                             )
@@ -475,19 +497,19 @@ fun DashboardScreen(
                     }
                 }
             } else {
-                items(transactions.take(10)) { tx ->
-                    TransactionRow(tx = tx, onClick = { onTxClick(tx.txid) })
+                items(transactions.take(8)) { tx ->
+                    CompactTransactionRow(tx = tx, onClick = { onTxClick(tx.txid) })
                 }
             }
 
-            item { Spacer(modifier = Modifier.height(8.dp)) }
+            item { Spacer(modifier = Modifier.height(16.dp)) }
         }
     }
 }
 
-// ── Balance Card ──
+// ── Hero Balance Card (Compact & Clean) ──
 @Composable
-private fun BalanceCard(
+private fun BalanceHeroCard(
     confirmedBalance: Long,
     unconfirmedBalance: Long,
     address: String,
@@ -499,9 +521,9 @@ private fun BalanceCard(
     onAddressTypeChanged: (AddressType) -> Unit = {}
 ) {
     var showTypeDropdown by remember { mutableStateOf(false) }
+    var hideBalance by remember { mutableStateOf(false) }
     val isMwebSource = defaultAddressType == AddressType.MWEB
-    val totalSat =
-        if (isMwebSource) mwebBalance else confirmedBalance + unconfirmedBalance
+    val totalSat = if (isMwebSource) mwebBalance else confirmedBalance + unconfirmedBalance
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -509,33 +531,44 @@ private fun BalanceCard(
         shape = MaterialTheme.shapes.large
     ) {
         Column(
-            modifier = Modifier.padding(20.dp),
+            modifier = Modifier.padding(18.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text(
-                text = "TOTAL BALANCE",
-                style = MaterialTheme.typography.labelSmall,
-                color = TextMuted,
-                fontFamily = FontFamily.Monospace,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(modifier = Modifier.height(6.dp))
-            Text(
-                text = formatBalance(totalSat),
-                style = MaterialTheme.typography.displayMedium,
-                color = TextHighEmphasis,
-                fontFamily = FontFamily.Monospace,
-                fontWeight = FontWeight.Bold
-            )
+            // Main balance row with privacy eye toggle
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    text = if (hideBalance) "••••••••" else formatBalance(totalSat),
+                    style = MaterialTheme.typography.displaySmall,
+                    color = TextHighEmphasis,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                IconButton(
+                    onClick = { hideBalance = !hideBalance },
+                    modifier = Modifier.size(24.dp)
+                ) {
+                    Icon(
+                        imageVector = if (hideBalance) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                        contentDescription = "Toggle privacy",
+                        tint = TextMuted,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
 
+            // Pending balance pill
             if (!isMwebSource && unconfirmedBalance != 0L) {
-                Spacer(modifier = Modifier.height(6.dp))
+                Spacer(modifier = Modifier.height(4.dp))
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
                         .clip(MaterialTheme.shapes.extraLarge)
                         .background(TertiaryAmber.copy(alpha = 0.12f))
-                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                        .padding(horizontal = 8.dp, vertical = 2.dp)
                 ) {
                     Box(
                         modifier = Modifier
@@ -543,7 +576,7 @@ private fun BalanceCard(
                             .clip(CircleShape)
                             .background(TertiaryAmber)
                     )
-                    Spacer(modifier = Modifier.width(5.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
                     Text(
                         text = "${if (unconfirmedBalance > 0) "+" else ""}${formatBalance(unconfirmedBalance)} pending",
                         style = MaterialTheme.typography.labelSmall,
@@ -553,50 +586,79 @@ private fun BalanceCard(
                 }
             }
 
-            if (fiatPriceUsd > 0) {
-                Spacer(modifier = Modifier.height(6.dp))
+            // Fiat valuation
+            if (!hideBalance && fiatPriceUsd > 0) {
+                Spacer(modifier = Modifier.height(4.dp))
                 val jkcAmount = totalSat / 100_000_000.0
                 Text(
-                    text = String.format("≈ $%.4f USD", jkcAmount * fiatPriceUsd),
+                    text = String.format("≈ $%.2f USD", jkcAmount * fiatPriceUsd),
                     style = MaterialTheme.typography.bodySmall,
                     color = TextMuted
                 )
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(14.dp))
 
-            // Address row with dropdown + copy
-            Box(modifier = Modifier.fillMaxWidth()) {
+            // Address Pill 1-Tap
+            Box {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(MaterialTheme.shapes.small)
+                        .clip(MaterialTheme.shapes.extraLarge)
                         .background(SurfaceContainerHigh)
-                        .clickable { showTypeDropdown = true }
-                        .padding(horizontal = 12.dp, vertical = 10.dp)
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
                 ) {
-                    Text(
-                        text = address.ifEmpty { "—" },
-                        style = MaterialTheme.typography.labelSmall,
-                        color = TextMuted,
-                        fontFamily = FontFamily.Monospace,
-                        modifier = Modifier.weight(1f)
+                    // Type indicator / dropdown toggle
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .clip(MaterialTheme.shapes.small)
+                            .clickable { showTypeDropdown = true }
+                            .padding(end = 4.dp)
+                    ) {
+                        Text(
+                            text = defaultAddressType.name,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = PrimaryCyan,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Icon(
+                            Icons.Filled.ArrowDropDown,
+                            contentDescription = "Change type",
+                            tint = PrimaryCyan,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .height(12.dp)
+                            .width(1.dp)
+                            .background(TextMuted.copy(alpha = 0.3f))
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    Icon(
-                        Icons.Filled.ArrowDropDown,
-                        contentDescription = "Change address type",
-                        tint = TextMuted,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Icon(
-                        Icons.Filled.ContentCopy, "Copy Address",
-                        tint = PrimaryCyan,
-                        modifier = Modifier.size(14.dp)
-                            .clickable(onClick = onCopyAddress)
-                    )
+
+                    // Address string + copy
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.clickable(onClick = onCopyAddress)
+                    ) {
+                        Text(
+                            text = if (address.length > 14)
+                                "${address.take(6)}...${address.takeLast(6)}"
+                            else address.ifEmpty { "—" },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = TextHighEmphasis,
+                            fontFamily = FontFamily.Monospace
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Icon(
+                            imageVector = Icons.Filled.ContentCopy,
+                            contentDescription = "Copy address",
+                            tint = TextMuted,
+                            modifier = Modifier.size(13.dp)
+                        )
+                    }
                 }
 
                 DropdownMenu(
@@ -607,14 +669,20 @@ private fun BalanceCard(
                         val type = try { AddressType.valueOf(typeKey) } catch (_: Exception) { null } ?: return@forEach
                         DropdownMenuItem(
                             text = {
-                                Text(
-                                    text = addr,
-                                    color = if (type == defaultAddressType) PrimaryCyan else TextHighEmphasis,
-                                    fontFamily = FontFamily.Monospace,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = if (type == defaultAddressType) FontWeight.Bold else FontWeight.Normal,
-                                    maxLines = 1
-                                )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = type.name,
+                                        fontWeight = if (type == defaultAddressType) FontWeight.Bold else FontWeight.Normal,
+                                        color = if (type == defaultAddressType) PrimaryCyan else TextHighEmphasis,
+                                        modifier = Modifier.width(70.dp)
+                                    )
+                                    Text(
+                                        text = "${addr.take(8)}...${addr.takeLast(6)}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = TextMuted,
+                                        fontFamily = FontFamily.Monospace
+                                    )
+                                }
                             },
                             onClick = {
                                 onAddressTypeChanged(type)
@@ -628,9 +696,49 @@ private fun BalanceCard(
     }
 }
 
-// ── Transaction Row ──
+// ── Quick Action Button (Compact Circular) ──
 @Composable
-private fun TransactionRow(tx: TransactionInfo, onClick: () -> Unit) {
+private fun QuickActionButton(
+    icon: ImageVector,
+    label: String,
+    containerColor: Color,
+    contentColor: Color,
+    onClick: () -> Unit
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .clip(MaterialTheme.shapes.small)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 4.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(48.dp)
+                .clip(CircleShape)
+                .background(containerColor),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                tint = contentColor,
+                modifier = Modifier.size(22.dp)
+            )
+        }
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            color = TextHighEmphasis,
+            fontWeight = FontWeight.Medium
+        )
+    }
+}
+
+// ── Compact Transaction Row ──
+@Composable
+private fun CompactTransactionRow(tx: TransactionInfo, onClick: () -> Unit) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -641,12 +749,13 @@ private fun TransactionRow(tx: TransactionInfo, onClick: () -> Unit) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(horizontal = 14.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // Direction circle icon
             Box(
                 modifier = Modifier
-                    .size(40.dp)
+                    .size(36.dp)
                     .clip(CircleShape)
                     .background(
                         if (tx.isSent) TxOutgoing.copy(alpha = 0.12f)
@@ -658,11 +767,11 @@ private fun TransactionRow(tx: TransactionInfo, onClick: () -> Unit) {
                     if (tx.isSent) Icons.Filled.ArrowUpward else Icons.Filled.ArrowDownward,
                     contentDescription = null,
                     tint = if (tx.isSent) TxOutgoing else SecondaryEmerald,
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier.size(18.dp)
                 )
             }
 
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(10.dp))
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(
@@ -672,37 +781,36 @@ private fun TransactionRow(tx: TransactionInfo, onClick: () -> Unit) {
                     fontWeight = FontWeight.Medium
                 )
                 Text(
-                    text = tx.txid.take(14) + "…",
+                    text = tx.txid.take(12) + "…",
                     style = MaterialTheme.typography.labelSmall,
                     color = TextMonospace,
-                    fontFamily = FontFamily.Monospace
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 11.sp
                 )
             }
 
             Column(horizontalAlignment = Alignment.End) {
                 Text(
                     text = "${if (tx.isSent) "-" else "+"}${formatBalance(tx.netAmount)}",
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.bodyMedium,
                     color = if (tx.isSent) TxOutgoing else SecondaryEmerald,
                     fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.SemiBold
                 )
-                Spacer(modifier = Modifier.height(3.dp))
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .clip(MaterialTheme.shapes.extraLarge)
-                        .background(
-                            if (tx.confirmed) SecondaryEmerald.copy(alpha = 0.10f)
-                            else TertiaryAmber.copy(alpha = 0.10f)
-                        )
-                        .padding(horizontal = 6.dp, vertical = 2.dp)
-                ) {
+                Spacer(modifier = Modifier.height(2.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        modifier = Modifier
+                            .size(5.dp)
+                            .clip(CircleShape)
+                            .background(if (tx.confirmed) SecondaryEmerald else TertiaryAmber)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
                     Text(
                         text = if (tx.confirmed) "Confirmed" else "Pending",
                         style = MaterialTheme.typography.labelSmall,
                         color = if (tx.confirmed) SecondaryEmerald else TertiaryAmber,
-                        fontFamily = FontFamily.Monospace
+                        fontSize = 10.sp
                     )
                 }
             }
@@ -712,8 +820,5 @@ private fun TransactionRow(tx: TransactionInfo, onClick: () -> Unit) {
 
 private fun formatBalance(satoshis: Long): String {
     val jkc = satoshis.toDouble() / 100_000_000.0
-    return String.format("%.8f JKC", jkc)
+    return String.format("%.4f JKC", jkc)
 }
-
-
-
