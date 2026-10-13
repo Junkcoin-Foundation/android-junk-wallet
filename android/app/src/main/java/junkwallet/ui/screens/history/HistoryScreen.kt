@@ -3,6 +3,7 @@ package junkwallet.ui.screens.history
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDownward
@@ -39,7 +41,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import junkwallet.domain.model.TransactionInfo
 import junkwallet.ui.theme.Background
 import junkwallet.ui.theme.PrimaryCyan
@@ -62,6 +67,7 @@ fun HistoryScreen(
     val filteredTransactions = when (selectedFilter) {
         "received" -> transactions.filter { !it.isSent }
         "sent" -> transactions.filter { it.isSent }
+        "mweb" -> transactions.filter { it.isMweb }
         else -> transactions
     }
 
@@ -128,6 +134,19 @@ fun HistoryScreen(
                     ),
                     shape = MaterialTheme.shapes.extraSmall
                 )
+                val mwebCount = transactions.count { it.isMweb }
+                if (mwebCount > 0) {
+                    FilterChip(
+                        selected = selectedFilter == "mweb",
+                        onClick = { selectedFilter = "mweb" },
+                        label = { Text("MWEB ($mwebCount)", style = MaterialTheme.typography.labelSmall) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = Color(0xFF0284C7).copy(alpha = 0.2f),
+                            selectedLabelColor = Color(0xFF38BDF8)
+                        ),
+                        shape = MaterialTheme.shapes.extraSmall
+                    )
+                }
             }
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -178,6 +197,9 @@ private fun TransactionItem(
     tx: TransactionInfo,
     onClick: () -> Unit
 ) {
+    val mwebBlue = Color(0xFF0284C7)
+    val mwebLightBlue = Color(0xFF38BDF8)
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -195,12 +217,13 @@ private fun TransactionItem(
             Icon(
                 imageVector = if (tx.isSent) Icons.Filled.ArrowUpward else Icons.Filled.ArrowDownward,
                 contentDescription = null,
-                tint = if (tx.isSent) TxOutgoing else SecondaryEmerald,
+                tint = if (tx.isMweb) mwebLightBlue else if (tx.isSent) TxOutgoing else SecondaryEmerald,
                 modifier = Modifier
                     .size(40.dp)
                     .clip(MaterialTheme.shapes.small)
                     .background(
-                        if (tx.isSent) TxOutgoing.copy(alpha = 0.12f)
+                        if (tx.isMweb) mwebBlue.copy(alpha = 0.16f)
+                        else if (tx.isSent) TxOutgoing.copy(alpha = 0.12f)
                         else SecondaryEmerald.copy(alpha = 0.12f)
                     )
                     .padding(8.dp)
@@ -209,11 +232,31 @@ private fun TransactionItem(
             Spacer(modifier = Modifier.width(12.dp))
 
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = if (tx.isSent) "Sent" else "Received",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = TextHighEmphasis
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = if (tx.isSent) "Sent" else "Received",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (tx.isMweb) mwebLightBlue else TextHighEmphasis,
+                        fontWeight = FontWeight.Medium
+                    )
+                    if (tx.isMweb) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(mwebBlue.copy(alpha = 0.25f))
+                                .padding(horizontal = 5.dp, vertical = 1.dp)
+                        ) {
+                            Text(
+                                text = "MWEB",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = mwebLightBlue,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
                 Text(
                     text = tx.txid.take(16) + "...",
                     style = MaterialTheme.typography.labelMedium,
@@ -233,7 +276,8 @@ private fun TransactionItem(
                 Text(
                     text = "${if (tx.isSent) "-" else "+"}${formatAmount(amount)}",
                     style = MaterialTheme.typography.labelLarge,
-                    color = if (tx.isSent) TxOutgoing else SecondaryEmerald
+                    color = if (tx.isMweb) mwebLightBlue else if (tx.isSent) TxOutgoing else SecondaryEmerald,
+                    fontWeight = FontWeight.SemiBold
                 )
                 Text(
                     text = when {
@@ -243,6 +287,7 @@ private fun TransactionItem(
                     },
                     style = MaterialTheme.typography.labelSmall,
                     color = when {
+                        tx.isMweb -> mwebLightBlue
                         tx.confirmed -> SecondaryEmerald
                         tx.isPending -> TertiaryAmber
                         else -> TextMuted

@@ -1,7 +1,9 @@
 package junkwallet.ui.screens.history
 
 import android.content.Intent
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -12,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -37,6 +40,8 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
@@ -112,10 +117,13 @@ fun TxDetailScreen(
                         .padding(24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
+                    val mwebBlue = Color(0xFF0284C7)
+                    val mwebLightBlue = Color(0xFF38BDF8)
+
                     Icon(
                         imageVector = if (tx.isSent) Icons.Filled.ArrowUpward else Icons.Filled.ArrowDownward,
                         contentDescription = null,
-                        tint = if (tx.isSent) TxOutgoing else SecondaryEmerald,
+                        tint = if (tx.isMweb) mwebLightBlue else if (tx.isSent) TxOutgoing else SecondaryEmerald,
                         modifier = Modifier.size(56.dp)
                     )
 
@@ -124,16 +132,33 @@ fun TxDetailScreen(
                     Text(
                         text = if (tx.isSent) "Sent" else "Received",
                         style = MaterialTheme.typography.headlineSmall,
-                        color = TextHighEmphasis,
+                        color = if (tx.isMweb) mwebLightBlue else TextHighEmphasis,
                         fontWeight = FontWeight.Bold
                     )
+
+                    if (tx.isMweb) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(mwebBlue.copy(alpha = 0.25f))
+                                .padding(horizontal = 10.dp, vertical = 3.dp)
+                        ) {
+                            Text(
+                                text = "MWEB Confidential Transaction",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = mwebLightBlue,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
 
                     Spacer(modifier = Modifier.height(8.dp))
 
                     Text(
                         text = "${if (tx.isSent) "-" else "+"}${formatAmount(tx.netAmount)} JKC",
                         style = MaterialTheme.typography.displaySmall,
-                        color = if (tx.isSent) TxOutgoing else SecondaryEmerald,
+                        color = if (tx.isMweb) mwebLightBlue else if (tx.isSent) TxOutgoing else SecondaryEmerald,
                         fontWeight = FontWeight.Bold
                     )
 
@@ -147,6 +172,7 @@ fun TxDetailScreen(
                         },
                         style = MaterialTheme.typography.bodyMedium,
                         color = when {
+                            tx.isMweb -> mwebLightBlue
                             tx.confirmed -> SecondaryEmerald
                             tx.isPending -> TertiaryAmber
                             else -> TextMuted

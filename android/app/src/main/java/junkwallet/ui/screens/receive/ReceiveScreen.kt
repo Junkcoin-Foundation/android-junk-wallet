@@ -113,11 +113,11 @@ fun ReceiveScreen(
         viewModel.ensureMwebReady()
     }
 
-    val localAddress = remember(selectedType) {
+    val localAddress = remember(selectedType, uiState.address, uiState.activeAccount?.id) {
         viewModel.generateAddress(selectedType) ?: uiState.address
     }
     val address = if (selectedType == AddressType.MWEB) {
-        mwebAddresses.firstOrNull() ?: ""
+        mwebAddresses.firstOrNull() ?: viewModel.generateAddress(AddressType.MWEB) ?: ""
     } else {
         localAddress
     }

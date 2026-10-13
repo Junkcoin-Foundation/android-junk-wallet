@@ -16,6 +16,7 @@ import junkwallet.domain.model.AddressType
 import junkwallet.domain.model.FeeEstimates
 import junkwallet.domain.model.JunkcoinNetwork
 import junkwallet.domain.model.JunkcoinParams
+import junkwallet.domain.model.TransactionInfo
 import junkwallet.domain.wallet.AddressValidator
 import junkwallet.domain.wallet.JunkcoinCrypto
 import junkwallet.domain.wallet.MwebKeychain
@@ -407,6 +408,25 @@ class SendViewModel @Inject constructor(
                     val mwebTxid = mwebRepository.broadcast(rawTx)
                         ?: throw Exception("Failed to broadcast MWEB transaction")
                     Log.d("SendVM", "MWEB spend broadcast: $mwebTxid")
+
+                    val activeAccount = storage.getActiveAccountId() ?: ""
+                    val netName = if (currentNetwork == JunkcoinNetwork.TESTNET) "testnet" else "mainnet"
+                    storage.saveMwebTransaction(
+                        accountId = activeAccount,
+                        network = netName,
+                        tx = TransactionInfo(
+                            txid = mwebTxid,
+                            confirmed = true,
+                            blockHeight = null,
+                            blockTime = System.currentTimeMillis() / 1000,
+                            fee = state.feeEstimate,
+                            sent = amountSatoshis,
+                            received = 0L,
+                            isSent = true,
+                            isMweb = true
+                        )
+                    )
+
                     _uiState.update {
                         it.copy(
                             currentStep = Step.SUCCESS,
@@ -453,6 +473,25 @@ class SendViewModel @Inject constructor(
                     val peginTxid = mwebRepository.broadcast(pegin.rawTx)
                         ?: throw Exception("Failed to broadcast peg-in")
                     Log.d("SendVM", "Peg-in broadcast: $peginTxid")
+
+                    val activeAccount = storage.getActiveAccountId() ?: ""
+                    val netName = if (currentNetwork == JunkcoinNetwork.TESTNET) "testnet" else "mainnet"
+                    storage.saveMwebTransaction(
+                        accountId = activeAccount,
+                        network = netName,
+                        tx = TransactionInfo(
+                            txid = peginTxid,
+                            confirmed = true,
+                            blockHeight = null,
+                            blockTime = System.currentTimeMillis() / 1000,
+                            fee = pegin.fee,
+                            sent = amountSatoshis,
+                            received = 0L,
+                            isSent = true,
+                            isMweb = true
+                        )
+                    )
+
                     _uiState.update {
                         it.copy(
                             currentStep = Step.SUCCESS,

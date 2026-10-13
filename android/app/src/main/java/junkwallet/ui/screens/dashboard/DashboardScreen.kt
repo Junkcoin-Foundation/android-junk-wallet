@@ -734,6 +734,9 @@ private fun QuickActionButton(
 // ── Compact Transaction Row ──
 @Composable
 private fun CompactTransactionRow(tx: TransactionInfo, onClick: () -> Unit) {
+    val mwebBlue = Color(0xFF0284C7)
+    val mwebLightBlue = Color(0xFF38BDF8)
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -753,7 +756,8 @@ private fun CompactTransactionRow(tx: TransactionInfo, onClick: () -> Unit) {
                     .size(36.dp)
                     .clip(CircleShape)
                     .background(
-                        if (tx.isSent) TxOutgoing.copy(alpha = 0.12f)
+                        if (tx.isMweb) mwebBlue.copy(alpha = 0.16f)
+                        else if (tx.isSent) TxOutgoing.copy(alpha = 0.12f)
                         else SecondaryEmerald.copy(alpha = 0.12f)
                     ),
                 contentAlignment = Alignment.Center
@@ -761,7 +765,7 @@ private fun CompactTransactionRow(tx: TransactionInfo, onClick: () -> Unit) {
                 Icon(
                     if (tx.isSent) Icons.Filled.ArrowUpward else Icons.Filled.ArrowDownward,
                     contentDescription = null,
-                    tint = if (tx.isSent) TxOutgoing else SecondaryEmerald,
+                    tint = if (tx.isMweb) mwebLightBlue else if (tx.isSent) TxOutgoing else SecondaryEmerald,
                     modifier = Modifier.size(18.dp)
                 )
             }
@@ -769,12 +773,31 @@ private fun CompactTransactionRow(tx: TransactionInfo, onClick: () -> Unit) {
             Spacer(modifier = Modifier.width(10.dp))
 
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = if (tx.isSent) "Sent" else "Received",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = TextHighEmphasis,
-                    fontWeight = FontWeight.Medium
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = if (tx.isSent) "Sent" else "Received",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (tx.isMweb) mwebLightBlue else TextHighEmphasis,
+                        fontWeight = FontWeight.Medium
+                    )
+                    if (tx.isMweb) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(mwebBlue.copy(alpha = 0.25f))
+                                .padding(horizontal = 5.dp, vertical = 1.dp)
+                        ) {
+                            Text(
+                                text = "MWEB",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = mwebLightBlue,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
                 Text(
                     text = tx.txid.take(12) + "…",
                     style = MaterialTheme.typography.labelSmall,
@@ -788,7 +811,7 @@ private fun CompactTransactionRow(tx: TransactionInfo, onClick: () -> Unit) {
                 Text(
                     text = "${if (tx.isSent) "-" else "+"}${formatBalance(tx.netAmount)}",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = if (tx.isSent) TxOutgoing else SecondaryEmerald,
+                    color = if (tx.isMweb) mwebLightBlue else if (tx.isSent) TxOutgoing else SecondaryEmerald,
                     fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -798,13 +821,17 @@ private fun CompactTransactionRow(tx: TransactionInfo, onClick: () -> Unit) {
                         modifier = Modifier
                             .size(5.dp)
                             .clip(CircleShape)
-                            .background(if (tx.confirmed) SecondaryEmerald else TertiaryAmber)
+                            .background(
+                                if (tx.isMweb) mwebLightBlue
+                                else if (tx.confirmed) SecondaryEmerald
+                                else TertiaryAmber
+                            )
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
                         text = if (tx.confirmed) "Confirmed" else "Pending",
                         style = MaterialTheme.typography.labelSmall,
-                        color = if (tx.confirmed) SecondaryEmerald else TertiaryAmber,
+                        color = if (tx.isMweb) mwebLightBlue else if (tx.confirmed) SecondaryEmerald else TertiaryAmber,
                         fontSize = 10.sp
                     )
                 }

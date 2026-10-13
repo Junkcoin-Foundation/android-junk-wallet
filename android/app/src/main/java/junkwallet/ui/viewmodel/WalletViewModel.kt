@@ -22,6 +22,7 @@ import android.util.Log
 import junkwallet.domain.model.NetworkType
 import junkwallet.domain.model.JunkcoinNetwork
 import junkwallet.domain.model.JunkcoinParams
+import junkwallet.domain.model.TransactionInfo
 import junkwallet.domain.model.WalletAccount
 import junkwallet.domain.model.WalletState
 import junkwallet.domain.usecase.GetPriceUseCase
@@ -29,6 +30,7 @@ import junkwallet.domain.usecase.SyncWalletUseCase
 import junkwallet.domain.wallet.AddressValidator
 import junkwallet.domain.wallet.JunkcoinCrypto
 import junkwallet.domain.wallet.MwebKeychain
+import xyz.junkcoin.mweb.JunkcoinMweb
 import javax.inject.Inject
 
 @HiltViewModel
@@ -176,17 +178,33 @@ class WalletViewModel @Inject constructor(
         } catch (_: Exception) { }
     }
 
+    private fun mergeWithMwebTransactions(transparentTxs: List<TransactionInfo>): List<TransactionInfo> {
+        val activeAccount = storage.getActiveAccountId() ?: ""
+        val netName = networkName(_uiState.value.network)
+        val mwebTxs = storage.getMwebTransactions(activeAccount, netName)
+        if (mwebTxs.isEmpty()) return transparentTxs
+
+        val mwebMap = mwebTxs.associateBy { it.txid }
+        val merged = transparentTxs.map { tx ->
+            mwebMap[tx.txid] ?: tx
+        }
+        val transparentTxids = transparentTxs.map { it.txid }.toSet()
+        val onlyMweb = mwebTxs.filterNot { it.txid in transparentTxids }
+        return (merged + onlyMweb).sortedByDescending { it.blockTime ?: 0L }
+    }
+
     fun syncWallet() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
             try {
                 Log.d("WalletVM", "Syncing ${_uiState.value.network.name} address=${_uiState.value.address}")
                 val updated = syncWalletUseCase.sync(_uiState.value.address, _uiState.value)
+                val mergedTxs = mergeWithMwebTransactions(updated.transactions)
                 _uiState.update {
                     it.copy(
                         confirmedBalance = updated.confirmedBalance,
                         unconfirmedBalance = updated.unconfirmedBalance,
-                        transactions = updated.transactions,
+                        transactions = mergedTxs,
                         utxos = updated.utxos,
                         blockHeight = updated.blockHeight,
                         feeEstimates = updated.feeEstimates,
@@ -195,7 +213,7 @@ class WalletViewModel @Inject constructor(
                         lastSynced = updated.lastSynced
                     )
                 }
-                Log.d("WalletVM", "Sync complete: balance=${updated.confirmedBalance} txs=${updated.transactions.size}")
+                Log.d("WalletVM", "Sync complete: balance=${updated.confirmedBalance} txs=${mergedTxs.size}")
 
                 // Fetch fiat price in background
                 try {
@@ -222,11 +240,12 @@ class WalletViewModel @Inject constructor(
             try {
                 Log.d("WalletVM", "Force refresh ${_uiState.value.network.name}")
                 val updated = syncWalletUseCase.forceRefresh(_uiState.value.address, _uiState.value)
+                val mergedTxs = mergeWithMwebTransactions(updated.transactions)
                 _uiState.update {
                     it.copy(
                         confirmedBalance = updated.confirmedBalance,
                         unconfirmedBalance = updated.unconfirmedBalance,
-                        transactions = updated.transactions,
+                        transactions = mergedTxs,
                         utxos = updated.utxos,
                         blockHeight = updated.blockHeight,
                         feeEstimates = updated.feeEstimates,
@@ -235,7 +254,7 @@ class WalletViewModel @Inject constructor(
                         lastSynced = updated.lastSynced
                     )
                 }
-                Log.d("WalletVM", "Force refresh complete: balance=${updated.confirmedBalance}")
+                Log.d("WalletVM", "Force refresh complete: balance=${updated.confirmedBalance} txs=${mergedTxs.size}")
 
                 // MWEB half of the dashboard refresh (local daemon): balance
                 // every time, pool registration until it has landed.
@@ -369,6 +388,8 @@ class WalletViewModel @Inject constructor(
 
         // Clear old data immediately
         syncJob?.cancel()
+        _mwebAddresses.value = emptyList()
+        _mwebBalance.value = 0L
         _uiState.update {
             it.copy(
                 isLoading = true,
@@ -407,7 +428,7 @@ class WalletViewModel @Inject constructor(
                         it.copy(
                             confirmedBalance = updated.confirmedBalance,
                             unconfirmedBalance = updated.unconfirmedBalance,
-                            transactions = updated.transactions,
+                            transactions = mergeWithMwebTransactions(updated.transactions),
                             utxos = updated.utxos,
                             blockHeight = updated.blockHeight,
                             feeEstimates = updated.feeEstimates,
@@ -462,8 +483,9 @@ class WalletViewModel @Inject constructor(
                     crypto.createP2TRAddressWithKey(privateKeyBytes, networkParams)
                 }
                 AddressType.MWEB -> {
-                    // MWEB addresses need mwebd — never persist a placeholder.
-                    null
+                    val keys = MwebKeychain.fromWif(wif) ?: return null
+                    val chainStr = if (network == NetworkType.TESTNET) "testnet" else "mainnet"
+                    JunkcoinMweb.addressesFor(chainStr, keys.scanSecret, keys.spendPub, 0, 1).firstOrNull()
                 }
             }
         } catch (e: Exception) {
@@ -531,7 +553,7 @@ class WalletViewModel @Inject constructor(
                     it.copy(
                         confirmedBalance = updated.confirmedBalance,
                         unconfirmedBalance = updated.unconfirmedBalance,
-                        transactions = updated.transactions,
+                        transactions = mergeWithMwebTransactions(updated.transactions),
                         utxos = updated.utxos,
                         blockHeight = updated.blockHeight,
                         feeEstimates = updated.feeEstimates,
@@ -555,7 +577,6 @@ class WalletViewModel @Inject constructor(
     fun generateAddress(type: AddressType): String? {
         val wif = storage.getSessionWif() ?: return null
         val networkParams = paramsFor(_uiState.value.network)
-        if (type == AddressType.MWEB) return null // needs mwebd, never a placeholder
         return try {
             val keyPair = crypto.getKeyPairFromWif(wif)
             val compressedPubKey = crypto.getCompressedPublicKey(keyPair.public)
@@ -568,9 +589,9 @@ class WalletViewModel @Inject constructor(
                     crypto.createP2TRAddressWithKey(privateKeyBytes, networkParams)
                 }
                 AddressType.MWEB -> {
-                    // MWEB addresses require mwebd - return placeholder
-                    // TODO: Generate MWEB address via mwebd
-                    "jcmweb1..."
+                    val keys = MwebKeychain.fromWif(wif) ?: return null
+                    val chainStr = if (_uiState.value.network == NetworkType.TESTNET) "testnet" else "mainnet"
+                    JunkcoinMweb.addressesFor(chainStr, keys.scanSecret, keys.spendPub, 0, 1).firstOrNull()
                 }
             }
         } catch (e: Exception) {
@@ -598,15 +619,19 @@ class WalletViewModel @Inject constructor(
                         crypto.createP2TRAddressWithKey(privateKeyBytes, networkParams)
                     }
                     AddressType.MWEB -> {
-                        // Placeholder is useless — leave MWEB out until mwebd
-                        // can produce a real address.
-                        null
+                        val keys = MwebKeychain.fromWif(wif)
+                        if (keys != null) {
+                            val chainStr = if (_uiState.value.network == NetworkType.TESTNET) "testnet" else "mainnet"
+                            val mwebList = JunkcoinMweb.addressesFor(chainStr, keys.scanSecret, keys.spendPub, 0, 10)
+                            if (mwebList.isNotEmpty()) {
+                                _mwebAddresses.value = mwebList
+                                mwebList.first()
+                            } else null
+                        } else null
                     }
-                }                 ?: continue
+                } ?: continue
                 addresses[type.name] = addr
             }
-            // MWEB cannot be derived locally: keep the daemon-provided entry
-            // (otherwise every regeneration would drop it from the switcher).
             _mwebAddresses.value.firstOrNull()?.let { mwebAddr ->
                 addresses[AddressType.MWEB.name] = mwebAddr
             }
@@ -684,6 +709,10 @@ class WalletViewModel @Inject constructor(
         storage.saveDefaultAddressType(account.defaultAddressType.name)
         _defaultAddressType.value = account.defaultAddressType
 
+        // Reset MWEB state immediately for previous account
+        _mwebAddresses.value = emptyList()
+        _mwebBalance.value = 0L
+
         // Swap the session key to this account's key (falls back to the root
         // key for accounts created before per-account keys existed).
         val wif = applyActiveAccountKey() ?: storage.getMasterWif() ?: storage.getSessionWif()
@@ -720,6 +749,7 @@ class WalletViewModel @Inject constructor(
                 // Drop what belonged to the previous account.
                 syncWalletUseCase.clearCache(oldAddress, currentNetworkName)
                 syncWallet()
+                syncMwebBalance()
             }
             startBackgroundSync()
         } else {
@@ -905,6 +935,30 @@ class WalletViewModel @Inject constructor(
                 val balance = mwebRepository.getBalance(keys.scanSecret)
                 _mwebBalance.value = balance
                 Log.d("WalletVM", "MWEB balance: $balance sat")
+
+                val utxos = mwebRepository.getUtxos(keys.scanSecret)
+                val activeAccount = storage.getActiveAccountId() ?: ""
+                val netName = networkName(_uiState.value.network)
+                val existingMwebTxs = storage.getMwebTransactions(activeAccount, netName)
+                for (utxo in utxos) {
+                    val alreadyRecorded = existingMwebTxs.any { it.txid == utxo.outputId }
+                    if (!alreadyRecorded) {
+                        val rxTx = TransactionInfo(
+                            txid = utxo.outputId,
+                            confirmed = true,
+                            blockHeight = null,
+                            blockTime = if (utxo.blockTime > 0) utxo.blockTime else System.currentTimeMillis() / 1000,
+                            fee = 0L,
+                            sent = 0L,
+                            received = utxo.value,
+                            isSent = false,
+                            isMweb = true
+                        )
+                        storage.saveMwebTransaction(activeAccount, netName, rxTx)
+                    }
+                }
+                val mergedTxs = mergeWithMwebTransactions(_uiState.value.transactions)
+                _uiState.update { it.copy(transactions = mergedTxs) }
             } catch (e: Exception) {
                 Log.e("WalletVM", "Failed to sync MWEB balance: ${e.message}")
             }

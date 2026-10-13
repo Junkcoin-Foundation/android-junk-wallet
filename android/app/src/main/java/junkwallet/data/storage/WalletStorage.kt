@@ -21,6 +21,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import junkwallet.domain.model.AddressType
 import junkwallet.domain.model.NetworkType
+import junkwallet.domain.model.TransactionInfo
 import junkwallet.domain.model.WalletAccount
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -483,6 +484,23 @@ class WalletStorage @Inject constructor(
                 // The root key IS this account's key.
                 saveAccountEncryptedWif(account.id, wif)
             }
+        }
+    }
+
+    // ── MWEB Transactions ──
+
+    fun saveMwebTransaction(accountId: String, network: String, tx: TransactionInfo) {
+        val existing = getMwebTransactions(accountId, network).filterNot { it.txid == tx.txid }
+        val updated = listOf(tx) + existing
+        prefs.edit().putString("mweb_txs_${accountId}_$network", Json.encodeToString(updated)).apply()
+    }
+
+    fun getMwebTransactions(accountId: String, network: String): List<TransactionInfo> {
+        val jsonStr = prefs.getString("mweb_txs_${accountId}_$network", null) ?: return emptyList()
+        return try {
+            Json.decodeFromString<List<TransactionInfo>>(jsonStr)
+        } catch (_: Exception) {
+            emptyList()
         }
     }
 

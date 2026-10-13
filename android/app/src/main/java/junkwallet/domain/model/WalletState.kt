@@ -56,7 +56,8 @@ data class TransactionInfo(
     val sent: Long = 0,
     val received: Long = 0,
     val isSent: Boolean = false,
-    val mempoolTime: Long? = null
+    val mempoolTime: Long? = null,
+    val isMweb: Boolean = false
 ) : Parcelable {
     val netAmount: Long get() = if (isSent) sent else received
     val isPending: Boolean get() = !confirmed
@@ -70,7 +71,8 @@ data class TransactionInfo(
         sent = parcel.readLong(),
         received = parcel.readLong(),
         isSent = parcel.readInt() == 1,
-        mempoolTime = parcel.readLong().let { if (it == -1L) null else it }
+        mempoolTime = parcel.readLong().let { if (it == -1L) null else it },
+        isMweb = parcel.readInt() == 1
     )
 
     override fun writeToParcel(parcel: Parcel, flags: Int) {
@@ -83,6 +85,7 @@ data class TransactionInfo(
         parcel.writeLong(received)
         parcel.writeInt(if (isSent) 1 else 0)
         parcel.writeLong(mempoolTime ?: -1L)
+        parcel.writeInt(if (isMweb) 1 else 0)
     }
 
     override fun describeContents(): Int = 0
