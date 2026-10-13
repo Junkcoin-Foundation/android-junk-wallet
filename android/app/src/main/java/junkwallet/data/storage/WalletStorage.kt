@@ -383,6 +383,35 @@ class WalletStorage @Inject constructor(
     }
 
     /**
+     * Get decrypted WIF for a specific account. Requires masterWif to be set in memory.
+     * Returns the account's specific WIF, or falls back to masterWif / sessionWif
+     * if the account shares the root key.
+     */
+    fun getWifForAccount(accountId: String): String? {
+        val accountWif = getAccountWif(accountId)
+        if (accountWif != null) return accountWif
+        return masterWif ?: sessionWif
+    }
+
+    /**
+     * Get decrypted WIF for the currently active account.
+     */
+    fun getActiveAccountWif(): String? {
+        val activeId = getActiveAccountId() ?: return masterWif ?: sessionWif
+        return getWifForAccount(activeId)
+    }
+
+    /**
+     * Decrypt and return the WIF for a specific account using the user's password.
+     * If the password is correct, unlocks masterWif and decrypts the account's key.
+     */
+    fun getWifForAccountWithPassword(accountId: String, password: String): String? {
+        val root = getDecryptedWif(password) ?: return null
+        saveMasterWif(root)
+        return getWifForAccount(accountId)
+    }
+
+    /**
      * Whether an encrypted key exists for this account (even if it cannot be
      * decrypted with the current root key).
      */

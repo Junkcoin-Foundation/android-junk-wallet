@@ -128,4 +128,8 @@ dependencies {
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)
     ksp(libs.room.compiler)
+
+    // Test
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("fr.acinq.secp256k1:secp256k1-kmp-jni-jvm:0.15.0")
 }

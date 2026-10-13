@@ -237,6 +237,14 @@ class WalletViewModel @Inject constructor(
                 }
                 Log.d("WalletVM", "Force refresh complete: balance=${updated.confirmedBalance}")
 
+                // MWEB half of the dashboard refresh (local daemon): balance
+                // every time, pool registration until it has landed.
+                if (!_isMwebRunning.value) ensureMwebReady()
+                if (_isMwebRunning.value) syncMwebBalance()
+                if (_uiState.value.allAddresses[AddressType.MWEB.name] == null) {
+                    getMwebAddresses()
+                }
+
                 try {
                     val price = getPriceUseCase(forceRefresh = true)
                     _fiatPrice.value = price
@@ -263,10 +271,15 @@ class WalletViewModel @Inject constructor(
                 delay(syncIntervalMs)
                 if (!_uiState.value.isLocked) {
                     syncWallet()
-                    // Keep the dashboard balance fresh while it is the
-                    // active display source (local daemon call).
-                    if (_defaultAddressType.value == AddressType.MWEB) {
-                        syncMwebBalance()
+                    // MWEB is a local daemon: keep it up and its dashboard
+                    // data fresh on every tick, regardless of which type
+                    // the switcher is showing.
+                    if (!_isMwebRunning.value) ensureMwebReady()
+                    if (_isMwebRunning.value) syncMwebBalance()
+                    if (_uiState.value.allAddresses[AddressType.MWEB.name] == null) {
+                        // Pool registration can fail early (locked/daemon not
+                        // ready): retry until it lands in the switcher.
+                        getMwebAddresses()
                     }
                 }
             }
@@ -310,6 +323,11 @@ class WalletViewModel @Inject constructor(
         generateAllAddresses()
         syncWallet()
         startBackgroundSync()
+        // Session keys now exist: register the MWEB pool + balance right
+        // away so the dashboard switcher offers MWEB without requiring a
+        // visit to Receive first (init ran while the wallet was locked and
+        // this fetch failed for lack of keys, with no retry).
+        startMwebDaemon()
     }
 
     fun lock() {

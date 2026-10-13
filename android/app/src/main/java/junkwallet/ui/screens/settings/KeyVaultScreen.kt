@@ -1,8 +1,11 @@
 package junkwallet.ui.screens.settings
 
+import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.widget.Toast
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -11,7 +14,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -24,6 +26,8 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -35,21 +39,23 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import junkwallet.data.storage.WalletStorage
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import junkwallet.domain.model.AddressType
+import junkwallet.domain.model.JunkcoinNetwork
+import junkwallet.domain.model.NetworkType
+import junkwallet.domain.model.WalletAccount
 import junkwallet.domain.wallet.JunkcoinCrypto
 import junkwallet.ui.theme.Background
 import junkwallet.ui.theme.ErrorCrimson
@@ -58,7 +64,9 @@ import junkwallet.ui.theme.SurfaceContainer
 import junkwallet.ui.theme.SurfaceContainerHigh
 import junkwallet.ui.theme.TextHighEmphasis
 import junkwallet.ui.theme.TextMuted
-import junkwallet.ui.theme.TertiaryAmber
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -69,14 +77,85 @@ fun KeyVaultScreen(
 ) {
     var password by remember { mutableStateOf("") }
     var showKey by remember { mutableStateOf(false) }
-    var revealedKey by remember { mutableStateOf<String?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var isVerified by remember { mutableStateOf(false) }
     var verifying by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
+    var accounts by remember { mutableStateOf<List<WalletAccount>>(emptyList()) }
+    var selectedAccountId by remember { mutableStateOf<String?>(null) }
+    var rootWif by remember { mutableStateOf<String?>(null) }
+
     val context = LocalContext.current
     val scrollState = rememberScrollState()
+
+    fun copyToClipboard(label: String, text: String, toastMessage: String) {
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        val clip = ClipData.newPlainText(label, text)
+        clipboard.setPrimaryClip(clip)
+        Toast.makeText(context, toastMessage, Toast.LENGTH_SHORT).show()
+    }
+
+    // Determine selected account
+    val selectedAccount = accounts.find { it.id == selectedAccountId } ?: accounts.firstOrNull()
+
+    // Retrieve active WIF for the selected account
+    val currentWif = remember(isVerified, selectedAccountId, rootWif) {
+        if (!isVerified) null
+        else if (selectedAccountId != null) {
+            storage.getWifForAccount(selectedAccountId!!) ?: rootWif
+        } else {
+            rootWif
+        }
+    }
+
+    // Network and chain parameters for selected account
+    val accountNetwork = selectedAccount?.network ?: when (storage.getNetwork()) {
+        "testnet" -> NetworkType.TESTNET
+        else -> NetworkType.MAINNET
+    }
+    val networkParams = if (accountNetwork == NetworkType.TESTNET) JunkcoinNetwork.TESTNET else JunkcoinNetwork.MAINNET
+
+    // Address Type state (defaults to account's defaultAddressType or P2PKH)
+    val defaultType = selectedAccount?.defaultAddressType ?: storage.getDefaultAddressType()
+    var selectedAddressType by remember(selectedAccountId, defaultType) {
+        mutableStateOf(if (defaultType == AddressType.MWEB) AddressType.P2PKH else defaultType)
+    }
+
+    // Dynamically derive the address directly from currentWif
+    val derivedAddress = remember(currentWif, networkParams, selectedAddressType) {
+        if (currentWif.isNullOrBlank()) ""
+        else {
+            try {
+                val keyPair = crypto.getKeyPairFromWif(currentWif)
+                val compPubKey = crypto.getCompressedPublicKey(keyPair.public)
+                when (selectedAddressType) {
+                    AddressType.P2PKH -> crypto.createP2PKHAddress(compPubKey, networkParams)
+                    AddressType.P2SH_P2WPKH -> crypto.createP2SH_P2WPKHAddress(compPubKey, networkParams)
+                    AddressType.P2WPKH -> crypto.createP2WPKHAddress(compPubKey, networkParams)
+                    AddressType.P2TR -> {
+                        val privBytes = crypto.getPrivateKeyBytes(keyPair.private)
+                        crypto.createP2TRAddressWithKey(privBytes, networkParams)
+                    }
+                    AddressType.MWEB -> crypto.createP2PKHAddress(compPubKey, networkParams)
+                }
+            } catch (e: Exception) {
+                ""
+            }
+        }
+    }
+
+    // Self-healing: if the active account is selected with its default address type, ensure storage matches
+    LaunchedEffect(derivedAddress, selectedAccountId) {
+        if (derivedAddress.isNotBlank() && selectedAccountId == storage.getActiveAccountId()) {
+            if (selectedAddressType == (selectedAccount?.defaultAddressType ?: storage.getDefaultAddressType())) {
+                val cached = storage.getAddress()
+                if (cached != derivedAddress) {
+                    storage.saveAddress(derivedAddress)
+                }
+            }
+        }
+    }
 
     Scaffold(
         containerColor = Background,
@@ -117,7 +196,7 @@ fun KeyVaultScreen(
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "Your private key is encrypted with AES-256-GCM and stored in Android Keystore.",
+                        text = "Your private keys are encrypted with AES-256-GCM. Never reveal or share keys with anyone.",
                         style = MaterialTheme.typography.bodySmall,
                         color = TextMuted
                     )
@@ -129,7 +208,7 @@ fun KeyVaultScreen(
             // ── Password Verification ──
             if (!isVerified) {
                 Text(
-                    text = "Enter Password to View Key",
+                    text = "Enter Password to View Keys",
                     style = MaterialTheme.typography.titleMedium,
                     color = TextHighEmphasis
                 )
@@ -159,7 +238,6 @@ fun KeyVaultScreen(
                 Button(
                     onClick = {
                         if (verifying) return@Button
-                        // PBKDF2 decrypt: run it off the main thread.
                         verifying = true
                         scope.launch {
                             val wif = withContext(Dispatchers.IO) {
@@ -167,7 +245,12 @@ fun KeyVaultScreen(
                             }
                             verifying = false
                             if (wif != null) {
-                                revealedKey = wif
+                                storage.saveMasterWif(wif)
+                                storage.migrateSingleWalletToAccount()
+                                rootWif = wif
+                                val accs = storage.getAccounts()
+                                accounts = accs
+                                selectedAccountId = storage.getActiveAccountId() ?: accs.firstOrNull()?.id
                                 isVerified = true
                                 error = null
                             } else {
@@ -186,9 +269,45 @@ fun KeyVaultScreen(
                     )
                 }
             } else {
+                // ── Account Selector ──
+                if (accounts.isNotEmpty()) {
+                    Text(
+                        text = "Select Account",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = TextHighEmphasis
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        accounts.forEach { acc ->
+                            val isSelected = acc.id == selectedAccountId
+                            val isActive = acc.id == storage.getActiveAccountId()
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = { selectedAccountId = acc.id },
+                                label = {
+                                    Text(
+                                        text = if (isActive) "${acc.name} (Active)" else acc.name,
+                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                    )
+                                },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = PrimaryCyan.copy(alpha = 0.2f),
+                                    selectedLabelColor = PrimaryCyan
+                                )
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
+
                 // ── Key Display ──
                 Text(
-                    text = "Your Private Key (WIF)",
+                    text = "Private Key (WIF) — ${selectedAccount?.name ?: "Account"}",
                     style = MaterialTheme.typography.titleMedium,
                     color = TextHighEmphasis
                 )
@@ -202,7 +321,7 @@ fun KeyVaultScreen(
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Text(
-                            text = if (showKey) (revealedKey ?: "") else "••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••",
+                            text = if (showKey) (currentWif ?: "") else "••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••••",
                             style = MaterialTheme.typography.labelLarge,
                             color = TextHighEmphasis
                         )
@@ -216,9 +335,9 @@ fun KeyVaultScreen(
                                 )
                             }
                             IconButton(onClick = {
-                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                clipboard.setText(AnnotatedString(revealedKey ?: ""))
-                                Toast.makeText(context, "Private key copied", Toast.LENGTH_SHORT).show()
+                                if (!currentWif.isNullOrBlank()) {
+                                    copyToClipboard("Junkcoin Private Key", currentWif, "Private key copied")
+                                }
                             }) {
                                 Icon(
                                     Icons.Filled.ContentCopy,
@@ -233,7 +352,7 @@ fun KeyVaultScreen(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Text(
-                    text = "⚠ Never share this key. Never enter it on any website. Anyone with this key can steal your funds.",
+                    text = "⚠ Never share this key. Anyone with this key can access and transfer your funds.",
                     style = MaterialTheme.typography.bodySmall,
                     color = ErrorCrimson
                 )
@@ -242,10 +361,37 @@ fun KeyVaultScreen(
 
                 // ── Derived Address ──
                 Text(
-                    text = "Derived Address",
+                    text = "Derived Address (Calculated from Key)",
                     style = MaterialTheme.typography.titleMedium,
                     color = TextHighEmphasis
                 )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Address Format selector
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    listOf(
+                        AddressType.P2PKH to "P2PKH (Legacy)",
+                        AddressType.P2WPKH to "P2WPKH (SegWit)",
+                        AddressType.P2TR to "P2TR (Taproot)",
+                        AddressType.P2SH_P2WPKH to "P2SH (Wrapped)"
+                    ).forEach { (type, label) ->
+                        FilterChip(
+                            selected = selectedAddressType == type,
+                            onClick = { selectedAddressType = type },
+                            label = { Text(label) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = PrimaryCyan.copy(alpha = 0.2f),
+                                selectedLabelColor = PrimaryCyan
+                            )
+                        )
+                    }
+                }
 
                 Spacer(modifier = Modifier.height(8.dp))
 
@@ -255,23 +401,51 @@ fun KeyVaultScreen(
                     shape = MaterialTheme.shapes.medium
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "${selectedAddressType.name} · ${if (accountNetwork == NetworkType.MAINNET) "Mainnet" else "Testnet"}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = PrimaryCyan
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = storage.getAddress() ?: "",
+                            text = derivedAddress.ifBlank { "Unable to derive address" },
                             style = MaterialTheme.typography.labelLarge,
                             color = TextHighEmphasis
                         )
                     }
                 }
 
+                Spacer(modifier = Modifier.height(12.dp))
+
+                OutlinedButton(
+                    onClick = {
+                        if (derivedAddress.isNotBlank()) {
+                            copyToClipboard("Junkcoin Address", derivedAddress, "Address copied")
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = derivedAddress.isNotBlank(),
+                    shape = MaterialTheme.shapes.medium
+                ) {
+                    Text("Copy Address")
+                }
+
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // ── Actions ──
+                // ── Lock Key Vault ──
                 OutlinedButton(
                     onClick = {
                         showKey = false
                         isVerified = false
-                        revealedKey = null
+                        rootWif = null
                         password = ""
+                        selectedAccountId = null
                     },
                     modifier = Modifier.fillMaxWidth(),
                     shape = MaterialTheme.shapes.medium
@@ -279,21 +453,7 @@ fun KeyVaultScreen(
                     Text("Lock Key Vault")
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
-
-                OutlinedButton(
-                    onClick = {
-                        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                        clipboard.setText(AnnotatedString(storage.getAddress() ?: ""))
-                        Toast.makeText(context, "Address copied", Toast.LENGTH_SHORT).show()
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = MaterialTheme.shapes.medium
-                ) {
-                    Text("Copy Address")
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
                 // Danger zone
                 Card(
@@ -311,7 +471,7 @@ fun KeyVaultScreen(
                         Button(
                             onClick = {
                                 storage.deleteWallet()
-                                // TODO: navigate to setup
+                                onBack()
                             },
                             modifier = Modifier.fillMaxWidth(),
                             colors = ButtonDefaults.buttonColors(
