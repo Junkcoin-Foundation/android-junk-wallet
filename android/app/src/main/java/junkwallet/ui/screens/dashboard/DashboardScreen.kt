@@ -133,6 +133,14 @@ fun DashboardScreen(
     }
     val networkColor = if (isMainnet) NetworkMainnet else NetworkTestnet
 
+    val displayedTransactions = remember(transactions, defaultAddressType) {
+        if (defaultAddressType == AddressType.MWEB) {
+            transactions.filter { it.isMweb }
+        } else {
+            transactions.filter { !it.isMweb }
+        }
+    }
+
     var showAccountMenu by remember { mutableStateOf(false) }
     var accountToDelete by remember { mutableStateOf<WalletAccount?>(null) }
     val activeAccount = accounts.find { it.id == activeAccountId }
@@ -463,7 +471,7 @@ fun DashboardScreen(
             }
 
             // ── Transactions List (Compact) ──
-            if (transactions.isEmpty()) {
+            if (displayedTransactions.isEmpty()) {
                 item {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
@@ -484,7 +492,8 @@ fun DashboardScreen(
                             )
                             Spacer(modifier = Modifier.height(8.dp))
                             Text(
-                                "No transactions yet",
+                                if (defaultAddressType == AddressType.MWEB) "No MWEB transactions yet"
+                                else "No transactions yet",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = TextMuted
                             )
@@ -492,7 +501,7 @@ fun DashboardScreen(
                     }
                 }
             } else {
-                items(transactions.take(8)) { tx ->
+                items(displayedTransactions.take(8)) { tx ->
                     CompactTransactionRow(tx = tx, onClick = { onTxClick(tx.txid) })
                 }
             }

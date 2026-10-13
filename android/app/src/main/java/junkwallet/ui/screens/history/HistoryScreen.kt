@@ -45,6 +45,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import junkwallet.domain.model.AddressType
 import junkwallet.domain.model.TransactionInfo
 import junkwallet.ui.theme.Background
 import junkwallet.ui.theme.PrimaryCyan
@@ -60,22 +61,31 @@ import junkwallet.ui.theme.TxOutgoing
 fun HistoryScreen(
     onBack: () -> Unit,
     onTxClick: (String) -> Unit,
-    transactions: List<TransactionInfo> = emptyList()
+    transactions: List<TransactionInfo> = emptyList(),
+    sourceAddressType: AddressType = AddressType.P2PKH
 ) {
+    val isMwebWallet = sourceAddressType == AddressType.MWEB
+    val relevantTransactions = remember(transactions, sourceAddressType) {
+        if (isMwebWallet) {
+            transactions.filter { it.isMweb }
+        } else {
+            transactions.filter { !it.isMweb }
+        }
+    }
+
     var selectedFilter by remember { mutableStateOf("all") }
 
     val filteredTransactions = when (selectedFilter) {
-        "received" -> transactions.filter { !it.isSent }
-        "sent" -> transactions.filter { it.isSent }
-        "mweb" -> transactions.filter { it.isMweb }
-        else -> transactions
+        "received" -> relevantTransactions.filter { !it.isSent }
+        "sent" -> relevantTransactions.filter { it.isSent }
+        else -> relevantTransactions
     }
 
     Scaffold(
         containerColor = Background,
         topBar = {
             TopAppBar(
-                title = { Text("Transaction History") },
+                title = { Text(if (isMwebWallet) "MWEB History" else "Transaction History") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
@@ -107,7 +117,7 @@ fun HistoryScreen(
                 FilterChip(
                     selected = selectedFilter == "all",
                     onClick = { selectedFilter = "all" },
-                    label = { Text("All (${transactions.size})", style = MaterialTheme.typography.labelSmall) },
+                    label = { Text("All (${relevantTransactions.size})", style = MaterialTheme.typography.labelSmall) },
                     colors = FilterChipDefaults.filterChipColors(
                         selectedContainerColor = PrimaryCyan.copy(alpha = 0.12f),
                         selectedLabelColor = PrimaryCyan
@@ -134,19 +144,6 @@ fun HistoryScreen(
                     ),
                     shape = MaterialTheme.shapes.extraSmall
                 )
-                val mwebCount = transactions.count { it.isMweb }
-                if (mwebCount > 0) {
-                    FilterChip(
-                        selected = selectedFilter == "mweb",
-                        onClick = { selectedFilter = "mweb" },
-                        label = { Text("MWEB ($mwebCount)", style = MaterialTheme.typography.labelSmall) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = Color(0xFF0284C7).copy(alpha = 0.2f),
-                            selectedLabelColor = Color(0xFF38BDF8)
-                        ),
-                        shape = MaterialTheme.shapes.extraSmall
-                    )
-                }
             }
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -165,7 +162,7 @@ fun HistoryScreen(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
-                            text = "No transactions yet",
+                            text = if (isMwebWallet) "No MWEB transactions yet" else "No transactions yet",
                             style = MaterialTheme.typography.bodyMedium,
                             color = TextMuted
                         )

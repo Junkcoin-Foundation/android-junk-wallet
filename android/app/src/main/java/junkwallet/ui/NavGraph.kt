@@ -310,6 +310,7 @@ fun JunkWalletNavHost(
 
         composable(Screen.History.route) {
             val uiState by walletViewModel.uiState.collectAsState()
+            val defaultAddressType by walletViewModel.defaultAddressType.collectAsState()
 
             HistoryScreen(
                 onBack = { navController.popBackStack() },
@@ -322,7 +323,8 @@ fun JunkWalletNavHost(
                         navController.navigate(Screen.TxDetail.createRoute(txid))
                     }
                 },
-                transactions = uiState.transactions
+                transactions = uiState.transactions,
+                sourceAddressType = defaultAddressType
             )
         }
 
