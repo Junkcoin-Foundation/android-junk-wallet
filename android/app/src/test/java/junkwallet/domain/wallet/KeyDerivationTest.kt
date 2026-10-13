@@ -36,4 +36,21 @@ class KeyDerivationTest {
 
         assertEquals(wallet.address, derivedAddress)
     }
+
+    @Test
+    fun testNetworkAddressDerivation() {
+        val wif = "NRkC88epH4rEpy3NrZpRw1gMwcw9YhnTgjxgDZ2hARg7kKxVYFEa"
+        val keyPair = crypto.getKeyPairFromWif(wif)
+        val compressedPubKey = crypto.getCompressedPublicKey(keyPair.public)
+
+        val mainnetAddress = crypto.createP2PKHAddress(compressedPubKey, JunkcoinNetwork.MAINNET)
+        val testnetAddress = crypto.createP2PKHAddress(compressedPubKey, JunkcoinNetwork.TESTNET)
+
+        // Mainnet P2PKH starts with '7'
+        assert(mainnetAddress.startsWith("7"))
+        // Testnet P2PKH starts with 'm' or 'n'
+        assert(testnetAddress.startsWith("m") || testnetAddress.startsWith("n"))
+        // They must never be equal
+        assertNotEquals(mainnetAddress, testnetAddress)
+    }
 }

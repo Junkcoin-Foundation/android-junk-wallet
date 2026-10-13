@@ -141,6 +141,19 @@ class WalletStorage @Inject constructor(
 
     fun saveNetwork(network: String) {
         prefs.edit().putString(KEY_NETWORK, network).apply()
+        val networkType = when (network) {
+            "testnet" -> NetworkType.TESTNET
+            else -> NetworkType.MAINNET
+        }
+        updateAllAccountsNetwork(networkType)
+    }
+
+    fun updateAllAccountsNetwork(network: NetworkType) {
+        val currentAccounts = getAccounts()
+        if (currentAccounts.isNotEmpty()) {
+            val updated = currentAccounts.map { it.copy(network = network) }
+            saveAccounts(updated)
+        }
     }
 
     fun getNetwork(): String {
@@ -326,8 +339,13 @@ class WalletStorage @Inject constructor(
 
     fun getAccounts(): List<WalletAccount> {
         val accountsJson = prefs.getString(KEY_ACCOUNTS_JSON, null) ?: return emptyList()
+        val currentGlobalNetwork = when (getNetwork()) {
+            "testnet" -> NetworkType.TESTNET
+            else -> NetworkType.MAINNET
+        }
         return try {
-            json.decodeFromString<List<WalletAccount>>(accountsJson)
+            val list = json.decodeFromString<List<WalletAccount>>(accountsJson)
+            list.map { if (it.network != currentGlobalNetwork) it.copy(network = currentGlobalNetwork) else it }
         } catch (e: Exception) {
             emptyList()
         }

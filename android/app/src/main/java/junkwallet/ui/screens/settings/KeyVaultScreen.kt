@@ -109,12 +109,12 @@ fun KeyVaultScreen(
         }
     }
 
-    // Network and chain parameters for selected account
-    val accountNetwork = selectedAccount?.network ?: when (storage.getNetwork()) {
+    // Global network: applies across all accounts
+    val globalNetwork = when (storage.getNetwork()) {
         "testnet" -> NetworkType.TESTNET
         else -> NetworkType.MAINNET
     }
-    val networkParams = if (accountNetwork == NetworkType.TESTNET) JunkcoinNetwork.TESTNET else JunkcoinNetwork.MAINNET
+    val networkParams = if (globalNetwork == NetworkType.TESTNET) JunkcoinNetwork.TESTNET else JunkcoinNetwork.MAINNET
 
     // Address Type state (defaults to account's defaultAddressType or P2PKH)
     val defaultType = selectedAccount?.defaultAddressType ?: storage.getDefaultAddressType()
@@ -407,7 +407,7 @@ fun KeyVaultScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "${selectedAddressType.name} · ${if (accountNetwork == NetworkType.MAINNET) "Mainnet" else "Testnet"}",
+                                text = "${selectedAddressType.name} · ${if (globalNetwork == NetworkType.MAINNET) "Mainnet" else "Testnet"}",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = PrimaryCyan
                             )

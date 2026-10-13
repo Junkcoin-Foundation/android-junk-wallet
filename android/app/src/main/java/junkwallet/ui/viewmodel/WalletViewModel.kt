@@ -359,8 +359,9 @@ class WalletViewModel @Inject constructor(
         val targetNetworkName = networkName(network)
         storage.saveNetwork(targetNetworkName)
 
-        // Keep the active account in sync with the network it lives on.
-        updateActiveAccount { it.copy(network = network) }
+        // Keep all accounts in sync with the global network
+        val allAccounts = storage.getAccounts()
+        val activeAccount = allAccounts.find { it.id == storage.getActiveAccountId() }
 
         // The MWEB daemon is chain specific: restart it for the new network
         // (this also refreshes the MWEB addresses and balance).
@@ -372,6 +373,8 @@ class WalletViewModel @Inject constructor(
             it.copy(
                 isLoading = true,
                 network = network,
+                accounts = allAccounts,
+                activeAccount = activeAccount,
                 confirmedBalance = 0,
                 unconfirmedBalance = 0,
                 transactions = emptyList(),
@@ -674,10 +677,10 @@ class WalletViewModel @Inject constructor(
     fun switchAccount(accountId: String) {
         val account = storage.getAccounts().find { it.id == accountId } ?: return
         val oldAddress = _uiState.value.address
-        val oldNetwork = networkName(_uiState.value.network)
+        val currentNetwork = storedNetworkType()
+        val currentNetworkName = networkName(currentNetwork)
 
         storage.setActiveAccountId(accountId)
-        storage.saveNetwork(networkName(account.network))
         storage.saveDefaultAddressType(account.defaultAddressType.name)
         _defaultAddressType.value = account.defaultAddressType
 
@@ -689,7 +692,7 @@ class WalletViewModel @Inject constructor(
         _uiState.update {
             it.copy(
                 activeAccount = account,
-                network = account.network,
+                network = currentNetwork,
                 isLoading = true,
                 confirmedBalance = 0,
                 unconfirmedBalance = 0,
@@ -707,15 +710,15 @@ class WalletViewModel @Inject constructor(
             return
         }
 
-        // Regenerate address for the new account's network and type
-        val newAddress = regenerateAddressForNetwork(wif, account.network)
+        // Regenerate address for the new account using the global network and type
+        val newAddress = regenerateAddressForNetwork(wif, currentNetwork)
         if (newAddress != null) {
             storage.saveAddress(newAddress)
             _uiState.update { it.copy(address = newAddress) }
             generateAllAddresses()
             viewModelScope.launch {
                 // Drop what belonged to the previous account.
-                syncWalletUseCase.clearCache(oldAddress, oldNetwork)
+                syncWalletUseCase.clearCache(oldAddress, currentNetworkName)
                 syncWallet()
             }
             startBackgroundSync()
