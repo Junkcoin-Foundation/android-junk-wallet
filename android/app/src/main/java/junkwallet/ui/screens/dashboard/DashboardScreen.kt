@@ -391,12 +391,12 @@ fun DashboardScreen(
                 }
             }
 
-            // ── Quick Action Bar (4 Compact Circle Actions) ──
+            // ── Quick Action Bar (3 Compact Circle Actions) ──
             item {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 4.dp),
+                        .padding(vertical = 8.dp),
                     horizontalArrangement = Arrangement.SpaceEvenly,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -420,13 +420,6 @@ fun DashboardScreen(
                         containerColor = SurfaceContainerHigh,
                         contentColor = PrimaryCyan,
                         onClick = onScanQr
-                    )
-                    QuickActionButton(
-                        icon = Icons.Filled.Key,
-                        label = "Vault",
-                        containerColor = SurfaceContainerHigh,
-                        contentColor = TextHighEmphasis,
-                        onClick = onKeyVault
                     )
                 }
             }
@@ -502,7 +495,7 @@ fun DashboardScreen(
                 }
             }
 
-            item { Spacer(modifier = Modifier.height(16.dp)) }
+            item { Spacer(modifier = Modifier.height(32.dp)) }
         }
     }
 }
