@@ -417,7 +417,7 @@ class SendViewModel @Inject constructor(
                         network = netName,
                         tx = TransactionInfo(
                             txid = mwebTxid,
-                            confirmed = true,
+                            confirmed = false,
                             blockHeight = null,
                             blockTime = System.currentTimeMillis() / 1000,
                             fee = state.feeEstimate,
@@ -488,24 +488,6 @@ class SendViewModel @Inject constructor(
                     }
                     Log.d("SendVM", "Peg-in broadcast: $peginTxid")
                     mwebRepository.addMempoolTx(pegin.rawTx)
-
-                    val activeAccount = storage.getActiveAccountId() ?: ""
-                    val netName = if (currentNetwork == JunkcoinNetwork.TESTNET) "testnet" else "mainnet"
-                    storage.saveMwebTransaction(
-                        accountId = activeAccount,
-                        network = netName,
-                        tx = TransactionInfo(
-                            txid = peginTxid,
-                            confirmed = true,
-                            blockHeight = null,
-                            blockTime = System.currentTimeMillis() / 1000,
-                            fee = pegin.fee,
-                            sent = amountSatoshis,
-                            received = 0L,
-                            isSent = true,
-                            isMweb = true
-                        )
-                    )
 
                     _uiState.update {
                         it.copy(

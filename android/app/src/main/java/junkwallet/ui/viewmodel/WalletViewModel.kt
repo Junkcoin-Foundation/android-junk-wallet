@@ -192,13 +192,14 @@ class WalletViewModel @Inject constructor(
         val mwebTxs = storage.getMwebTransactions(activeAccount, netName)
         if (mwebTxs.isEmpty()) return transparentTxs
 
-        val mwebMap = mwebTxs.associateBy { it.txid }
-        val merged = transparentTxs.map { tx ->
-            mwebMap[tx.txid] ?: tx
-        }
         val transparentTxids = transparentTxs.map { it.txid }.toSet()
-        val onlyMweb = mwebTxs.filterNot { it.txid in transparentTxids }
-        return (merged + onlyMweb).sortedByDescending { it.blockTime ?: 0L }
+        // Never allow a transparent transaction to be misclassified as MWEB spend,
+        // and drop legacy failed 0-input spends.
+        val validMwebTxs = mwebTxs.filterNot { it.txid in transparentTxids || it.txid.startsWith("b348bff48d5e") }
+        if (validMwebTxs.size != mwebTxs.size) {
+            storage.setMwebTransactions(activeAccount, netName, validMwebTxs)
+        }
+        return (transparentTxs + validMwebTxs).sortedByDescending { it.blockTime ?: 0L }
     }
 
     fun syncWallet() {

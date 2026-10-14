@@ -135,8 +135,9 @@ fun DashboardScreen(
     }
     val networkColor = if (isMainnet) NetworkMainnet else NetworkTestnet
 
-    val displayedTransactions = remember(transactions) {
-        transactions.sortedByDescending { it.blockTime }
+    val displayedTransactions = remember(transactions, defaultAddressType) {
+        val isMwebView = defaultAddressType == AddressType.MWEB
+        transactions.filter { it.isMweb == isMwebView }
     }
 
     var showAccountMenu by remember { mutableStateOf(false) }
@@ -534,7 +535,7 @@ private fun BalanceHeroCard(
     var hideBalance by remember { mutableStateOf(false) }
     val isMwebSource = defaultAddressType == AddressType.MWEB
     val transparentBalance = confirmedBalance + unconfirmedBalance
-    val totalSat = transparentBalance + mwebBalance
+    val totalSat = if (isMwebSource) mwebBalance else transparentBalance
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -574,34 +575,15 @@ private fun BalanceHeroCard(
                 }
             }
 
-            // Sub-balance breakdown
-            Spacer(modifier = Modifier.height(4.dp))
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center,
-                modifier = Modifier
-                    .clip(MaterialTheme.shapes.small)
-                    .background(SurfaceContainerHigh.copy(alpha = 0.5f))
-                    .padding(horizontal = 8.dp, vertical = 3.dp)
-            ) {
+            // Hint with the balance of the other type (same account)
+            val otherSat = if (isMwebSource) transparentBalance else mwebBalance
+            if (otherSat > 0L) {
+                Spacer(modifier = Modifier.height(4.dp))
                 Text(
-                    text = "Transparent: ${formatBalance(transparentBalance)}",
+                    text = "${if (isMwebSource) "Transparent" else "MWEB"}: ${if (hideBalance) "••••" else formatBalance(otherSat)}",
                     style = MaterialTheme.typography.labelSmall,
-                    color = if (!isMwebSource) PrimaryCyan else TextMuted,
-                    fontFamily = FontFamily.Monospace,
-                    fontWeight = if (!isMwebSource) FontWeight.Bold else FontWeight.Normal
-                )
-                Text(
-                    text = "  •  ",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = TextMuted
-                )
-                Text(
-                    text = "MWEB: ${formatBalance(mwebBalance)}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (isMwebSource) Color(0xFF7C4DFF) else TextMuted,
-                    fontFamily = FontFamily.Monospace,
-                    fontWeight = if (isMwebSource) FontWeight.Bold else FontWeight.Normal
+                    color = TextMuted,
+                    fontFamily = FontFamily.Monospace
                 )
             }
 
@@ -641,7 +623,7 @@ private fun BalanceHeroCard(
                 val utxoH = mwebStatus?.mwebUtxosHeight?.toLong() ?: 0L
                 val mwebHeaderH = mwebStatus?.mwebHeaderHeight?.toLong() ?: 0L
 
-                val isSyncing = isMwebSyncing || mwebStatus == null || headerH < (tipHeight - 5) || utxoH < mwebHeaderH
+                val isSyncing = isMwebSyncing || mwebStatus == null || headerH < (tipHeight - 5) || mwebHeaderH < (tipHeight - 5) || utxoH < mwebHeaderH
 
                 Row(
                     verticalAlignment = Alignment.CenterVertically,

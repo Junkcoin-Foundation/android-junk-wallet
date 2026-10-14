@@ -495,6 +495,10 @@ class WalletStorage @Inject constructor(
         prefs.edit().putString("mweb_txs_${accountId}_$network", Json.encodeToString(updated)).apply()
     }
 
+    fun setMwebTransactions(accountId: String, network: String, txs: List<TransactionInfo>) {
+        prefs.edit().putString("mweb_txs_${accountId}_$network", Json.encodeToString(txs)).apply()
+    }
+
     fun getMwebTransactions(accountId: String, network: String): List<TransactionInfo> {
         val jsonStr = prefs.getString("mweb_txs_${accountId}_$network", null) ?: return emptyList()
         return try {
