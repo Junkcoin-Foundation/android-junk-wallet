@@ -165,6 +165,10 @@ class JunkcoinMweb {
         requireServer().broadcastRaw(rawTx)
     }
 
+    suspend fun addMempoolTx(rawTx: ByteArray) = withContext(Dispatchers.IO) {
+        requireServer().addMempoolTx(rawTx)
+    }
+
     /**
      * Builds a fully signed peg-in transaction (transparent inputs funding an
      * MWEB output) in one call: skeleton -> daemon Create -> transparent

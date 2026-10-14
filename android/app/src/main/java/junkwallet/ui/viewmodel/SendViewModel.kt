@@ -408,6 +408,7 @@ class SendViewModel @Inject constructor(
                     val mwebTxid = mwebRepository.broadcast(rawTx)
                         ?: throw Exception("Failed to broadcast MWEB transaction")
                     Log.d("SendVM", "MWEB spend broadcast: $mwebTxid")
+                    mwebRepository.addMempoolTx(rawTx)
 
                     val activeAccount = storage.getActiveAccountId() ?: ""
                     val netName = if (currentNetwork == JunkcoinNetwork.TESTNET) "testnet" else "mainnet"
@@ -486,6 +487,7 @@ class SendViewModel @Inject constructor(
                         throw Exception("Failed to broadcast peg-in")
                     }
                     Log.d("SendVM", "Peg-in broadcast: $peginTxid")
+                    mwebRepository.addMempoolTx(pegin.rawTx)
 
                     val activeAccount = storage.getActiveAccountId() ?: ""
                     val netName = if (currentNetwork == JunkcoinNetwork.TESTNET) "testnet" else "mainnet"

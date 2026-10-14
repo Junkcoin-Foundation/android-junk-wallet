@@ -135,12 +135,8 @@ fun DashboardScreen(
     }
     val networkColor = if (isMainnet) NetworkMainnet else NetworkTestnet
 
-    val displayedTransactions = remember(transactions, defaultAddressType) {
-        if (defaultAddressType == AddressType.MWEB) {
-            transactions.filter { it.isMweb }
-        } else {
-            transactions.filter { !it.isMweb }
-        }
+    val displayedTransactions = remember(transactions) {
+        transactions.sortedByDescending { it.blockTime }
     }
 
     var showAccountMenu by remember { mutableStateOf(false) }
@@ -537,7 +533,8 @@ private fun BalanceHeroCard(
     var showTypeDropdown by remember { mutableStateOf(false) }
     var hideBalance by remember { mutableStateOf(false) }
     val isMwebSource = defaultAddressType == AddressType.MWEB
-    val totalSat = if (isMwebSource) mwebBalance else confirmedBalance + unconfirmedBalance
+    val transparentBalance = confirmedBalance + unconfirmedBalance
+    val totalSat = transparentBalance + mwebBalance
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -577,8 +574,39 @@ private fun BalanceHeroCard(
                 }
             }
 
+            // Sub-balance breakdown
+            Spacer(modifier = Modifier.height(4.dp))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center,
+                modifier = Modifier
+                    .clip(MaterialTheme.shapes.small)
+                    .background(SurfaceContainerHigh.copy(alpha = 0.5f))
+                    .padding(horizontal = 8.dp, vertical = 3.dp)
+            ) {
+                Text(
+                    text = "Transparent: ${formatBalance(transparentBalance)}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (!isMwebSource) PrimaryCyan else TextMuted,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = if (!isMwebSource) FontWeight.Bold else FontWeight.Normal
+                )
+                Text(
+                    text = "  •  ",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = TextMuted
+                )
+                Text(
+                    text = "MWEB: ${formatBalance(mwebBalance)}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (isMwebSource) Color(0xFF7C4DFF) else TextMuted,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = if (isMwebSource) FontWeight.Bold else FontWeight.Normal
+                )
+            }
+
             // Pending balance pill
-            if (!isMwebSource && unconfirmedBalance != 0L) {
+            if (unconfirmedBalance != 0L) {
                 Spacer(modifier = Modifier.height(4.dp))
                 Row(
                     verticalAlignment = Alignment.CenterVertically,

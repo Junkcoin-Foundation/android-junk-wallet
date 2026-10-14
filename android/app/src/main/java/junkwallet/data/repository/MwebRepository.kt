@@ -273,6 +273,15 @@ class MwebRepository @Inject constructor(
         }
     }
 
+    /** Records an unconfirmed MWEB transaction into the daemon's mempool cache. */
+    suspend fun addMempoolTx(rawTx: ByteArray) = withContext(Dispatchers.IO) {
+        try {
+            mweb.addMempoolTx(rawTx)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to add transaction to MWEB mempool: ${e.message}", e)
+        }
+    }
+
     data class PeginResult(
         val rawTx: ByteArray,
         val txid: String,
