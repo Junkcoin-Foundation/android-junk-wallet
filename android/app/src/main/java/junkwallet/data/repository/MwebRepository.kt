@@ -197,6 +197,7 @@ class MwebRepository @Inject constructor(
             val changeAddress = addresses.first()
 
             val utxos = mweb.utxos(scanSecret, 0L)
+            Log.d(TAG, "createTransaction: recipient='$recipientAddress', amount=$amount, utxosCount=${utxos.size}, totalUtxos=${utxos.sumOf { it.value }}")
             if (utxos.isEmpty()) {
                 Log.e(TAG, "No MWEB UTXOs to spend")
                 return@withContext null
@@ -266,7 +267,10 @@ class MwebRepository @Inject constructor(
     /** Broadcasts a raw transaction, returning its txid or null on failure. */
     suspend fun broadcast(rawTx: ByteArray): String? = withContext(Dispatchers.IO) {
         try {
-            mweb.broadcast(rawTx)
+            Log.d(TAG, "Broadcasting rawTx: ${rawTx.size} bytes via MWEB daemon...")
+            val txid = mweb.broadcast(rawTx)
+            Log.d(TAG, "Broadcast response txid: $txid")
+            txid
         } catch (e: Exception) {
             Log.e(TAG, "Failed to broadcast MWEB transaction: ${e.message}", e)
             null

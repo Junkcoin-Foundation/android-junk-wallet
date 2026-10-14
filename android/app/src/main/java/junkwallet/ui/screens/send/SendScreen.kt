@@ -111,9 +111,12 @@ fun SendScreen(
     val validation by viewModel.validation.collectAsState()
     val addressInfo by viewModel.addressInfo.collectAsState()
 
-    // Funding source follows the home address-type switcher.
-    LaunchedEffect(sourceAddressType, mwebBalance) {
-        viewModel.setSource(sourceAddressType, mwebBalance)
+    // Funding source follows the initial home address-type switcher.
+    LaunchedEffect(sourceAddressType) {
+        viewModel.initSource(sourceAddressType, mwebBalance)
+    }
+    LaunchedEffect(mwebBalance) {
+        viewModel.updateMwebBalance(mwebBalance)
     }
 
     LaunchedEffect(uiState.isSent) {
@@ -667,12 +670,13 @@ private fun CompactInputStep(
         Spacer(modifier = Modifier.height(28.dp))
 
         // ── 5. Primary Action Button ──
+        val parsedAmt = amount.trim().replace(',', '.').toDoubleOrNull()
         Button(
             onClick = onSend,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(50.dp),
-            enabled = isAddressValid && amount.toDoubleOrNull() != null && (amount.toDoubleOrNull() ?: 0.0) > 0,
+            enabled = isAddressValid && parsedAmt != null && parsedAmt > 0.0,
             shape = RoundedCornerShape(14.dp),
             colors = ButtonDefaults.buttonColors(
                 containerColor = PrimaryCyan,

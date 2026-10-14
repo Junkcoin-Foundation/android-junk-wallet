@@ -123,18 +123,50 @@ class SendViewModel @Inject constructor(
         }
     }
 
+    private var userSelectedSource: Boolean = false
+
+    fun initSource(type: AddressType, mwebBal: Long) {
+        if (!userSelectedSource) {
+            val isMweb = type == AddressType.MWEB
+            _uiState.update {
+                it.copy(
+                    sourceType = type,
+                    mwebBalance = mwebBal,
+                    balance = if (isMweb) mwebBal else it.transparentBalance
+                )
+            }
+            Log.d("SendVM", "initSource: type=$type, isMweb=$isMweb, bal=${if (isMweb) mwebBal else _uiState.value.transparentBalance}")
+            estimateFee()
+        } else {
+            updateMwebBalance(mwebBal)
+        }
+    }
+
+    fun updateMwebBalance(mwebBal: Long) {
+        _uiState.update {
+            val isMweb = it.sourceType == AddressType.MWEB
+            it.copy(
+                mwebBalance = mwebBal,
+                balance = if (isMweb) mwebBal else it.balance
+            )
+        }
+    }
+
     /**
      * Point this send flow at the funding source. MWEB swaps in the mweb
      * balance; switching back to transparent reloads/uses transparent balance.
      */
     fun setSource(type: AddressType, mwebBal: Long? = null) {
+        userSelectedSource = true
         val currentMwebBal = mwebBal ?: _uiState.value.mwebBalance
         val isMweb = type == AddressType.MWEB
+        val bal = if (isMweb) currentMwebBal else _uiState.value.transparentBalance
+        Log.d("SendVM", "User selected source: type=$type, isMweb=$isMweb, balance=$bal")
         _uiState.update {
             it.copy(
                 sourceType = type,
                 mwebBalance = currentMwebBal,
-                balance = if (isMweb) currentMwebBal else it.transparentBalance
+                balance = bal
             )
         }
         estimateFee()
@@ -145,6 +177,7 @@ class SendViewModel @Inject constructor(
 
         val validationResult = addressValidator.validate(address, currentNetwork)
         _validation.value = validationResult
+        Log.d("SendVM", "updateRecipientAddress: '$address', valid=${validationResult.isValid}, type=${validationResult.addressType}")
 
         if (validationResult.isValid && validationResult.addressType != null) {
             val typeInfo = AddressValidator.getAddressTypeInfo(validationResult.addressType)
@@ -163,6 +196,8 @@ class SendViewModel @Inject constructor(
     }
 
     fun updateAmount(amount: String) {
+        val normalized = amount.trim().replace(',', '.')
+        Log.d("SendVM", "updateAmount: raw='$amount', norm='$normalized'")
         _uiState.update { it.copy(amount = amount) }
         estimateFee()
     }
@@ -354,25 +389,35 @@ class SendViewModel @Inject constructor(
 
     fun startConfirmation() {
         val state = _uiState.value
-        if (!state.isAddressValid || state.amount.toDoubleOrNull() == null) {
+        val normalizedAmount = state.amount.trim().replace(',', '.')
+        val parsedAmount = normalizedAmount.toDoubleOrNull()
+        Log.d("SendVM", "startConfirmation: addr='${state.recipientAddress}', valid=${state.isAddressValid}, amount='${state.amount}', parsed=$parsedAmount, balance=${state.balance}, source=${state.sourceType}")
+        if (!state.isAddressValid || parsedAmount == null || parsedAmount <= 0.0) {
             _uiState.update { it.copy(error = "Invalid address or amount") }
             return
         }
-        val satoshis = jkcToSatoshis(state.amount)
-        if (state.sourceType == AddressType.MWEB && satoshis > state.balance) {
-            _uiState.update { it.copy(error = "Amount exceeds available MWEB balance") }
+        val satoshis = jkcToSatoshis(normalizedAmount)
+        if (satoshis <= 0) {
+            _uiState.update { it.copy(error = "Amount must be greater than 0") }
+            return
+        }
+        if (satoshis > state.balance) {
+            val srcName = if (state.sourceType == AddressType.MWEB) "MWEB" else "Transparent"
+            _uiState.update { it.copy(error = "Amount exceeds available $srcName balance") }
             return
         }
         _uiState.update {
             it.copy(
                 currentStep = Step.CONFIRM,
-                sentAmountSatoshis = satoshis
+                sentAmountSatoshis = satoshis,
+                error = null
             )
         }
     }
 
     private fun jkcToSatoshis(jkcString: String): Long {
-        val jkc = jkcString.toDoubleOrNull() ?: return 0L
+        val normalized = jkcString.trim().replace(',', '.')
+        val jkc = normalized.toDoubleOrNull() ?: return 0L
         return (jkc * 100_000_000).toLong()
     }
 
