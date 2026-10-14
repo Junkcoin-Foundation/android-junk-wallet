@@ -72,6 +72,8 @@ class SendViewModel @Inject constructor(
         val feeEstimate: Long = 0,
         val feePerByte: Long = 10L,
         val balance: Long = 0,
+        val mwebBalance: Long = 0,
+        val transparentBalance: Long = 0,
         val isAddressValid: Boolean = false,
         val isAmountValid: Boolean = false,
         val isSending: Boolean = false,
@@ -109,33 +111,33 @@ class SendViewModel @Inject constructor(
     private fun loadBalance() {
         viewModelScope.launch {
             try {
-                val balance = blockchainRepository.getBalance(blockchainRepository.getWalletAddress())
-                // The init fetch completes asynchronously: if the source has
-                // already been switched to MWEB (setSource), discard this
-                // legacy transparent balance — MAX and the fee math read
-                // state.balance and would compute from the wrong wallet.
-                if (_uiState.value.sourceType == AddressType.MWEB) return@launch
-                _uiState.update { it.copy(balance = balance) }
+                val transparent = blockchainRepository.getBalance(blockchainRepository.getWalletAddress())
+                _uiState.update {
+                    it.copy(
+                        transparentBalance = transparent,
+                        balance = if (it.sourceType == AddressType.MWEB) it.mwebBalance else transparent
+                    )
+                }
+                estimateFee()
             } catch (_: Exception) { }
         }
     }
 
     /**
-     * Point this send flow at the active funding source (the home address
-     * type switcher). MWEB swaps in the mweb balance; switching back to a
-     * transparent type reloads the transparent balance.
+     * Point this send flow at the funding source. MWEB swaps in the mweb
+     * balance; switching back to transparent reloads/uses transparent balance.
      */
-    fun setSource(type: AddressType, mwebBalance: Long) {
-        val previous = _uiState.value.sourceType
-        if (type == AddressType.MWEB) {
-            _uiState.update { it.copy(sourceType = type, balance = mwebBalance) }
-            return
+    fun setSource(type: AddressType, mwebBal: Long? = null) {
+        val currentMwebBal = mwebBal ?: _uiState.value.mwebBalance
+        val isMweb = type == AddressType.MWEB
+        _uiState.update {
+            it.copy(
+                sourceType = type,
+                mwebBalance = currentMwebBal,
+                balance = if (isMweb) currentMwebBal else it.transparentBalance
+            )
         }
-        _uiState.update { it.copy(sourceType = type) }
-        if (previous == AddressType.MWEB) {
-            // balance field was showing the mweb amount
-            loadBalance()
-        }
+        estimateFee()
     }
 
     fun updateRecipientAddress(address: String) {

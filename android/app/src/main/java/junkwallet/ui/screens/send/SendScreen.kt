@@ -211,7 +211,10 @@ fun SendScreen(
                         onMaxClick = { viewModel.fillMaxAmount() },
                         onSend = { viewModel.startConfirmation() },
                         onQrScan = onQrScan,
-                        isMwebSource = uiState.sourceType == AddressType.MWEB
+                        isMwebSource = uiState.sourceType == AddressType.MWEB,
+                        transparentBalance = uiState.transparentBalance,
+                        mwebBalance = uiState.mwebBalance,
+                        onSourceTypeChange = { viewModel.setSource(it) }
                     )
                 }
 
@@ -223,7 +226,8 @@ fun SendScreen(
                         totalSatoshis = uiState.sentAmountSatoshis + uiState.feeEstimate,
                         onConfirm = { viewModel.broadcast() },
                         onBack = { viewModel.previousStep() },
-                        addressType = addressInfo?.type
+                        addressType = addressInfo?.type,
+                        isMwebSource = uiState.sourceType == AddressType.MWEB
                     )
                 }
 
@@ -304,7 +308,10 @@ private fun CompactInputStep(
     onMaxClick: () -> Unit,
     onSend: () -> Unit,
     onQrScan: () -> Unit,
-    isMwebSource: Boolean
+    isMwebSource: Boolean,
+    transparentBalance: Long = 0L,
+    mwebBalance: Long = 0L,
+    onSourceTypeChange: (AddressType) -> Unit = {}
 ) {
     val clipboardManager = LocalClipboardManager.current
     val context = LocalContext.current
@@ -316,6 +323,42 @@ private fun CompactInputStep(
             .fillMaxWidth()
             .animateContentSize()
     ) {
+        // ── 0. Funding Source Selector ──
+        Text(
+            text = "From",
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Medium,
+            color = TextMuted,
+            modifier = Modifier.padding(bottom = 6.dp)
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(SurfaceContainer)
+                .padding(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            FundingSourceTab(
+                modifier = Modifier.weight(1f),
+                title = "Transparent",
+                balanceText = formatBalanceShort(transparentBalance),
+                selected = !isMwebSource,
+                accentColor = PrimaryCyan,
+                onClick = { onSourceTypeChange(AddressType.P2PKH) }
+            )
+            FundingSourceTab(
+                modifier = Modifier.weight(1f),
+                title = "MWEB Confidential",
+                balanceText = formatBalanceShort(mwebBalance),
+                selected = isMwebSource,
+                accentColor = TertiaryAmber,
+                onClick = { onSourceTypeChange(AddressType.MWEB) }
+            )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
         // ── 1. Recipient Address Field with inline Paste & Scan ──
         Text(
             text = "Recipient",
@@ -659,7 +702,8 @@ private fun CompactConfirmStep(
     totalSatoshis: Long,
     onConfirm: () -> Unit,
     onBack: () -> Unit,
-    addressType: AddressType?
+    addressType: AddressType?,
+    isMwebSource: Boolean = false
 ) {
     val amountJkc = String.format("%.8f", amountSatoshis / 100_000_000.0)
     val feeJkc = String.format("%.8f", feeSatoshis / 100_000_000.0)
@@ -695,6 +739,23 @@ private fun CompactConfirmStep(
                 HorizontalDivider(color = SurfaceContainerHigh)
                 Spacer(modifier = Modifier.height(14.dp))
 
+                // Source
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("From Source", fontSize = 11.sp, color = TextMuted)
+                    Text(
+                        text = if (isMwebSource) "MWEB Confidential" else "Transparent",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = if (isMwebSource) TertiaryAmber else PrimaryCyan
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
                 // Recipient
                 Text(
                     text = "To Recipient",
@@ -710,13 +771,28 @@ private fun CompactConfirmStep(
                 )
 
                 if (addressType != null) {
-                    Spacer(modifier = Modifier.height(4.dp))
+                    Spacer(modifier = Modifier.height(6.dp))
                     val typeInfo = AddressValidator.getAddressTypeInfo(addressType)
-                    Text(
-                        text = "${typeInfo.icon} ${typeInfo.displayName}",
-                        fontSize = 11.sp,
-                        color = PrimaryCyan
-                    )
+                    val transferTypeLabel = when {
+                        isMwebSource && addressType != AddressType.MWEB -> "Peg-Out to Transparent"
+                        !isMwebSource && addressType == AddressType.MWEB -> "Peg-In to MWEB"
+                        isMwebSource -> "Confidential Transfer"
+                        else -> "Standard Transfer"
+                    }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "${typeInfo.icon} ${typeInfo.displayName}",
+                            fontSize = 11.sp,
+                            color = PrimaryCyan
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "• $transferTypeLabel",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (isMwebSource && addressType != AddressType.MWEB) TertiaryAmber else SecondaryEmerald
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(14.dp))
@@ -967,4 +1043,61 @@ private fun QrScannedBanner(
             }
         }
     }
+}
+
+@Composable
+private fun FundingSourceTab(
+    modifier: Modifier = Modifier,
+    title: String,
+    balanceText: String,
+    selected: Boolean,
+    accentColor: Color,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(
+                if (selected) accentColor.copy(alpha = 0.16f)
+                else Color.Transparent
+            )
+            .clickable(onClick = onClick)
+            .padding(vertical = 8.dp, horizontal = 10.dp)
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = title,
+                    fontSize = 12.sp,
+                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                    color = if (selected) accentColor else TextMuted
+                )
+                if (selected) {
+                    Box(
+                        modifier = Modifier
+                            .size(6.dp)
+                            .clip(CircleShape)
+                            .background(accentColor)
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = balanceText,
+                fontSize = 11.sp,
+                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.SemiBold,
+                color = if (selected) TextHighEmphasis else TextMuted
+            )
+        }
+    }
+}
+
+private fun formatBalanceShort(satoshis: Long): String {
+    val jkc = satoshis / 100_000_000.0
+    return String.format("%.4f JKC", jkc)
 }

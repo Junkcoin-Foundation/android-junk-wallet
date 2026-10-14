@@ -548,6 +548,37 @@ private fun BalanceHeroCard(
                 .padding(18.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            // Balance Type Pill (1-tap to switch between Transparent and MWEB)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .clip(MaterialTheme.shapes.extraLarge)
+                    .background(
+                        if (isMwebSource) TertiaryAmber.copy(alpha = 0.15f)
+                        else PrimaryCyan.copy(alpha = 0.12f)
+                    )
+                    .clickable {
+                        onAddressTypeChanged(if (isMwebSource) AddressType.P2PKH else AddressType.MWEB)
+                    }
+                    .padding(horizontal = 10.dp, vertical = 3.dp)
+            ) {
+                Text(
+                    text = if (isMwebSource) "🔒 MWEB Confidential" else "🌐 Transparent",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (isMwebSource) TertiaryAmber else PrimaryCyan,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Icon(
+                    imageVector = Icons.Filled.SwapHoriz,
+                    contentDescription = "Switch balance type",
+                    tint = if (isMwebSource) TertiaryAmber else PrimaryCyan,
+                    modifier = Modifier.size(14.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(6.dp))
+
             // Main balance row with privacy eye toggle
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -579,12 +610,28 @@ private fun BalanceHeroCard(
             val otherSat = if (isMwebSource) transparentBalance else mwebBalance
             if (otherSat > 0L) {
                 Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "${if (isMwebSource) "Transparent" else "MWEB"}: ${if (hideBalance) "••••" else formatBalance(otherSat)}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = TextMuted,
-                    fontFamily = FontFamily.Monospace
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .clip(MaterialTheme.shapes.small)
+                        .clickable {
+                            onAddressTypeChanged(if (isMwebSource) AddressType.P2PKH else AddressType.MWEB)
+                        }
+                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                ) {
+                    Text(
+                        text = "${if (isMwebSource) "Transparent" else "MWEB"}: ${if (hideBalance) "••••" else formatBalance(otherSat)}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = TextMuted,
+                        fontFamily = FontFamily.Monospace
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "⇄",
+                        fontSize = 11.sp,
+                        color = PrimaryCyan
+                    )
+                }
             }
 
             // Pending balance pill
