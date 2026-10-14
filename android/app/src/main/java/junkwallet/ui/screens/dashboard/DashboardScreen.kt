@@ -115,6 +115,8 @@ fun DashboardScreen(
     networkName: String = "Mainnet",
     defaultAddressType: AddressType = AddressType.P2PKH,
     mwebBalance: Long = 0L,
+    mwebStatus: xyz.junkcoin.mweb.MwebStatus? = null,
+    isMwebSyncing: Boolean = false,
     isLoading: Boolean = false,
     transactions: List<TransactionInfo> = emptyList(),
     fiatPriceUsd: Double = 0.0,
@@ -353,6 +355,10 @@ fun DashboardScreen(
                     fiatPriceUsd = fiatPriceUsd,
                     defaultAddressType = defaultAddressType,
                     mwebBalance = mwebBalance,
+                    mwebStatus = mwebStatus,
+                    isMwebSyncing = isMwebSyncing,
+                    isTestnet = !isMainnet,
+                    currentTip = blockHeight.toLong(),
                     onCopyAddress = { copyAddress(displayedAddress) },
                     onAddressTypeChanged = onAddressTypeChanged
                 )
@@ -521,6 +527,10 @@ private fun BalanceHeroCard(
     fiatPriceUsd: Double,
     defaultAddressType: AddressType = AddressType.P2PKH,
     mwebBalance: Long = 0L,
+    mwebStatus: xyz.junkcoin.mweb.MwebStatus? = null,
+    isMwebSyncing: Boolean = false,
+    isTestnet: Boolean = false,
+    currentTip: Long = 0L,
     onCopyAddress: () -> Unit,
     onAddressTypeChanged: (AddressType) -> Unit = {}
 ) {
@@ -535,11 +545,14 @@ private fun BalanceHeroCard(
         shape = MaterialTheme.shapes.large
     ) {
         Column(
-            modifier = Modifier.padding(18.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(18.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // Main balance row with privacy eye toggle
             Row(
+                modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center
             ) {
@@ -586,6 +599,68 @@ private fun BalanceHeroCard(
                         style = MaterialTheme.typography.labelSmall,
                         color = TertiaryAmber,
                         fontFamily = FontFamily.Monospace
+                    )
+                }
+            }
+
+            // MWEB Sync indicator when MWEB is selected
+            if (isMwebSource) {
+                Spacer(modifier = Modifier.height(6.dp))
+                val tipHeight = if (currentTip > 0) currentTip else (if (isTestnet) 231_250L else 1_174_000L)
+                val mwebActivation = if (isTestnet) 1L else 1_165_000L
+
+                val headerH = mwebStatus?.blockHeaderHeight?.toLong() ?: 0L
+                val utxoH = mwebStatus?.mwebUtxosHeight?.toLong() ?: 0L
+                val mwebHeaderH = mwebStatus?.mwebHeaderHeight?.toLong() ?: 0L
+
+                val isSyncing = isMwebSyncing || mwebStatus == null || headerH < (tipHeight - 5) || utxoH < mwebHeaderH
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .clip(MaterialTheme.shapes.extraLarge)
+                        .background(
+                            if (isSyncing) PrimaryCyan.copy(alpha = 0.12f)
+                            else SecondaryEmerald.copy(alpha = 0.12f)
+                        )
+                        .padding(horizontal = 10.dp, vertical = 3.dp)
+                ) {
+                    if (isSyncing) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(10.dp),
+                            strokeWidth = 1.5.dp,
+                            color = PrimaryCyan
+                        )
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .size(6.dp)
+                                .clip(CircleShape)
+                                .background(SecondaryEmerald)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(6.dp))
+                    val statusText = when {
+                        mwebStatus == null || headerH == 0L -> "Connecting to MWEB daemon..."
+                        headerH < mwebActivation -> {
+                            val pct = (headerH * 100L / tipHeight).coerceIn(0, 99)
+                            "Syncing Headers: %,d / %,d (%d%%)".format(headerH, tipHeight, pct)
+                        }
+                        utxoH < mwebHeaderH -> {
+                            "Scanning MWEB: %,d / %,d".format(utxoH, mwebHeaderH)
+                        }
+                        headerH < (tipHeight - 5) -> {
+                            val pct = (headerH * 100L / tipHeight).coerceIn(0, 99)
+                            "Syncing Headers: %,d / %,d (%d%%)".format(headerH, tipHeight, pct)
+                        }
+                        else -> "MWEB Synced • Block %,d".format(headerH)
+                    }
+                    Text(
+                        text = statusText,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (isSyncing) PrimaryCyan else SecondaryEmerald,
+                        fontFamily = FontFamily.Monospace,
+                        fontSize = 11.sp
                     )
                 }
             }

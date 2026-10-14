@@ -504,6 +504,15 @@ class WalletStorage @Inject constructor(
         }
     }
 
+    fun isMwebDbReset(versionKey: String): Boolean {
+        return prefs.getBoolean("mweb_db_reset_$versionKey", false)
+    }
+
+    fun setMwebDbReset(versionKey: String, reset: Boolean) {
+        prefs.edit().putBoolean("mweb_db_reset_$versionKey", reset).apply()
+    }
+
+
     // ── Crypto Helpers ──
 
     private fun deriveKey(password: String, salt: ByteArray): SecretKey {

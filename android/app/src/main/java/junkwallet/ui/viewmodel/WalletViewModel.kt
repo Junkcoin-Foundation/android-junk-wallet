@@ -6,6 +6,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -66,7 +67,14 @@ class WalletViewModel @Inject constructor(
     private val _isMwebRunning = MutableStateFlow(false)
     val isMwebRunning: StateFlow<Boolean> = _isMwebRunning.asStateFlow()
 
+    private val _mwebStatus = MutableStateFlow<xyz.junkcoin.mweb.MwebStatus?>(null)
+    val mwebStatus: StateFlow<xyz.junkcoin.mweb.MwebStatus?> = _mwebStatus.asStateFlow()
+
+    private val _isMwebSyncing = MutableStateFlow(false)
+    val isMwebSyncing: StateFlow<Boolean> = _isMwebSyncing.asStateFlow()
+
     private var syncJob: Job? = null
+    private var mwebStatusJob: Job? = null
     private val syncIntervalMs = 45_000L // 45 seconds
 
     init {
@@ -888,6 +896,7 @@ class WalletViewModel @Inject constructor(
     override fun onCleared() {
         super.onCleared()
         syncJob?.cancel()
+        mwebStatusJob?.cancel()
         mwebRepository.stop()
     }
 
@@ -905,10 +914,42 @@ class WalletViewModel @Inject constructor(
                     Log.d("WalletVM", "MWEB daemon started")
                     getMwebAddresses()
                     syncMwebBalance()
+                    startMwebStatusPolling()
                 }
             } catch (e: Exception) {
                 Log.e("WalletVM", "Failed to start MWEB daemon: ${e.message}")
                 _isMwebRunning.value = false
+            }
+        }
+    }
+
+    private fun startMwebStatusPolling() {
+        mwebStatusJob?.cancel()
+        mwebStatusJob = viewModelScope.launch {
+            var lastUtxosHeight = -1
+            while (isActive) {
+                try {
+                    val status = mwebRepository.status()
+                    _mwebStatus.value = status
+                    if (status != null) {
+                        val headerH = status.blockHeaderHeight
+                        val utxoH = status.mwebUtxosHeight
+                        val mwebH = status.mwebHeaderHeight
+                        val isTestnet = _uiState.value.network == NetworkType.TESTNET
+                        val targetHeight = if (_uiState.value.blockHeight > 0) _uiState.value.blockHeight else (if (isTestnet) 231_250 else 1_174_000)
+                        val isSyncing = headerH < (targetHeight - 5) || utxoH < mwebH
+                        _isMwebSyncing.value = isSyncing
+
+                        // If new MWEB UTXO blocks were scanned, trigger balance sync
+                        if (utxoH != lastUtxosHeight && utxoH > 0) {
+                            lastUtxosHeight = utxoH
+                            syncMwebBalance()
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.w("WalletVM", "Error checking MWEB status: ${e.message}")
+                }
+                delay(3_000L) // Poll every 3s
             }
         }
     }

@@ -203,6 +203,8 @@ fun JunkWalletNavHost(
             val fiatPrice by walletViewModel.fiatPrice.collectAsState()
             val defaultAddressType by walletViewModel.defaultAddressType.collectAsState()
             val mwebBalance by walletViewModel.mwebBalance.collectAsState()
+            val mwebStatus by walletViewModel.mwebStatus.collectAsState()
+            val isMwebSyncing by walletViewModel.isMwebSyncing.collectAsState()
 
             LaunchedEffect(uiState.isLocked) {
                 if (uiState.isLocked && currentRoute == Screen.Dashboard.route) {
@@ -272,6 +274,8 @@ fun JunkWalletNavHost(
                 },
                 defaultAddressType = defaultAddressType,
                 mwebBalance = mwebBalance,
+                mwebStatus = mwebStatus,
+                isMwebSyncing = isMwebSyncing,
                 isLoading = uiState.isLoading,
                 transactions = uiState.transactions,
                 fiatPriceUsd = fiatPrice.usd,

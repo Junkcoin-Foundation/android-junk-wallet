@@ -470,8 +470,21 @@ class SendViewModel @Inject constructor(
                         feePerByte = feePerByte
                     ) ?: throw Exception("Failed to build peg-in transaction")
                     Log.d("SendVM", "Peg-in built: txid=${pegin.txid}, fee=${pegin.fee}")
-                    val peginTxid = mwebRepository.broadcast(pegin.rawTx)
-                        ?: throw Exception("Failed to broadcast peg-in")
+                    // Broadcast: Try MWEB daemon P2P first, fall back to Blockchain API (Esplora / sendrawtransaction)
+                    var peginTxid = mwebRepository.broadcast(pegin.rawTx)
+                    if (peginTxid == null) {
+                        Log.w("SendVM", "MWEB P2P broadcast failed or returned null, attempting fallback via Blockchain API...")
+                        val rawTxHex = pegin.rawTx.joinToString("") { "%02x".format(it) }
+                        val broadcastSuccess = blockchainRepository.broadcastTransaction(rawTxHex)
+                        if (broadcastSuccess) {
+                            peginTxid = pegin.txid
+                            Log.d("SendVM", "Peg-in broadcasted successfully via Blockchain API: $peginTxid")
+                        }
+                    }
+
+                    if (peginTxid == null) {
+                        throw Exception("Failed to broadcast peg-in")
+                    }
                     Log.d("SendVM", "Peg-in broadcast: $peginTxid")
 
                     val activeAccount = storage.getActiveAccountId() ?: ""

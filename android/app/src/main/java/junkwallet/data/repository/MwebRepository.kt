@@ -35,7 +35,8 @@ class MwebRepository @Inject constructor(
         private const val TAG = "MwebRepository"
         private const val MAINNET = "mainnet"
         private const val TESTNET = "testnet"
-        private const val MAINNET_PEER = "mainnet.junk-coin.com:9771"
+        // Active, responsive Junkcoin mainnet node (from network tip)
+        private const val MAINNET_PEER = "204.12.227.26:9771"
         // Public P2P proxy for the testnet junkcoind node. The previous seed
         // (testnet.junk-coin.com:19771) sits behind Cloudflare, which does not
         // forward the p2p port, so the daemon ended up with zero peers and
