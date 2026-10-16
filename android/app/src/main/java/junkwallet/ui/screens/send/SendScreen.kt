@@ -119,11 +119,8 @@ fun SendScreen(
         viewModel.updateMwebBalance(mwebBalance)
     }
 
-    LaunchedEffect(uiState.isSent) {
-        if (uiState.isSent && uiState.txId != null) {
-            onSuccess(uiState.txId!!)
-        }
-    }
+    // No auto-navigation on uiState.isSent — the success panel (with txid)
+    // must remain visible until the user explicitly taps "Done".
 
     Scaffold(
         containerColor = Background,

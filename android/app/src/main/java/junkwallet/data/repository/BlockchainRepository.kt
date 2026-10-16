@@ -171,4 +171,30 @@ class BlockchainRepository @Inject constructor(
             false
         }
     }
+
+    /**
+     * Broadcasts a raw transaction through the explorer backend and returns
+     * the txid the node reported, or null when the node rejected it. The
+     * node's full verdict is logged, which makes this usable as the
+     * authoritative relay for MWEB spends whose P2P relay cannot be trusted.
+     */
+    suspend fun broadcastRawVerbose(rawTxHex: String): String? {
+        return try {
+            val body = rawTxHex.toRequestBody("text/plain".toMediaType())
+            val response = activeApi.broadcastTransaction(body)
+            if (response.isSuccessful) {
+                val raw = response.body()?.trim().orEmpty()
+                val txid = Regex("[0-9a-fA-F]{64}").find(raw)?.value
+                Log.d("BlockchainRepo", "broadcastRaw accepted: ${txid ?: raw}")
+                txid
+            } else {
+                val errorBody = response.errorBody()?.string() ?: "Unknown error"
+                Log.e("BlockchainRepo", "broadcastRaw verdict ${response.code()}: $errorBody")
+                null
+            }
+        } catch (e: Exception) {
+            Log.e("BlockchainRepo", "broadcastRaw exception: ${e.message}", e)
+            null
+        }
+    }
 }

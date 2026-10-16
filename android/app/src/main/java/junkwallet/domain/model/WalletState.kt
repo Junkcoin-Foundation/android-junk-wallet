@@ -57,7 +57,11 @@ data class TransactionInfo(
     val received: Long = 0,
     val isSent: Boolean = false,
     val mempoolTime: Long? = null,
-    val isMweb: Boolean = false
+    val isMweb: Boolean = false,
+    /** "", "PEG_IN", "PEG_OUT", "MWEB_SEND", "MWEB_RECEIVE" */
+    val kind: String = "",
+    /** Counterparty address shown for labeled types (peg-in/out, transfer). */
+    val peer: String = ""
 ) : Parcelable {
     val netAmount: Long get() = if (isSent) sent else received
     val isPending: Boolean get() = !confirmed

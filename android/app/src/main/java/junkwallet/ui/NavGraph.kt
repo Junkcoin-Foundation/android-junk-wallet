@@ -294,6 +294,10 @@ fun JunkWalletNavHost(
             SendScreen(
                 onBack = { navController.popBackStack() },
                 onSuccess = { txId ->
+                    // The send flow updated the MWEB ledger in storage; pull a
+                    // fresh snapshot so the dashboard shows the new entry (and
+                    // the balance) without waiting for the 45s background sync.
+                    walletViewModel.forceRefresh()
                     navController.navigate(Screen.Dashboard.route) {
                         popUpTo(Screen.Dashboard.route) { inclusive = true }
                     }

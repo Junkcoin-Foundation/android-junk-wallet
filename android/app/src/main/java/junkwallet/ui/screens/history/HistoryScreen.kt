@@ -69,7 +69,9 @@ fun HistoryScreen(
         if (isMwebWallet) {
             transactions.filter { it.isMweb }
         } else {
-            transactions.filter { !it.isMweb }
+            // Transparent view: also show peg-outs (MWEB → transparent) so
+            // the destination transparent address is visible here too.
+            transactions.filter { !it.isMweb || it.kind == "PEG_OUT" }
         }
     }
 
@@ -197,6 +199,32 @@ private fun TransactionItem(
     val mwebBlue = Color(0xFF0284C7)
     val mwebLightBlue = Color(0xFF38BDF8)
 
+    // Type labels: peg-in / peg-out / MWEB transfer get a chip and a
+    // "from / to" line naming the counterparty address.
+    val kindLabel = when (tx.kind) {
+        "PEG_IN" -> "PEG-IN"
+        "PEG_OUT" -> "PEG-OUT"
+        "MWEB_SEND", "MWEB_RECEIVE" -> "TRANSFER"
+        else -> null
+    }
+    val kindColor = when (tx.kind) {
+        "PEG_IN" -> SecondaryEmerald
+        "PEG_OUT" -> TxOutgoing
+        else -> mwebLightBlue
+    }
+    val peerShort = if (tx.peer.length > 18) tx.peer.take(10) + "…" + tx.peer.takeLast(6) else tx.peer
+    val kindDetail = when (tx.kind) {
+        "PEG_IN" -> if (tx.isMweb) {
+            "Peg-in · Transparent → MWEB" + if (peerShort.isEmpty()) "" else " · From $peerShort"
+        } else {
+            "Peg-in · Transparent → MWEB" + if (peerShort.isEmpty()) "" else " · To $peerShort"
+        }
+        "PEG_OUT" -> "Peg-out · MWEB → Transparent" + if (peerShort.isEmpty()) "" else " · To $peerShort"
+        "MWEB_SEND" -> "Transfer MWEB" + if (peerShort.isEmpty()) "" else " · To $peerShort"
+        "MWEB_RECEIVE" -> "Transfer MWEB"
+        else -> null
+    }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -253,12 +281,36 @@ private fun TransactionItem(
                             )
                         }
                     }
+                    if (kindLabel != null) {
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(kindColor.copy(alpha = 0.2f))
+                                .padding(horizontal = 5.dp, vertical = 1.dp)
+                        ) {
+                            Text(
+                                text = kindLabel,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = kindColor,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
                 }
                 Text(
                     text = tx.txid.take(16) + "...",
                     style = MaterialTheme.typography.labelMedium,
                     color = TextMuted
                 )
+                if (kindDetail != null) {
+                    Text(
+                        text = kindDetail,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = mwebLightBlue
+                    )
+                }
                 if (tx.blockHeight != null) {
                     Text(
                         text = "Block #${tx.blockHeight}",

@@ -43,6 +43,16 @@ class MwebRepository @Inject constructor(
         // every broadcast failed with "no peers replied to inv message".
         private const val TESTNET_PEER = "junk-testnet.s3na.xyz:19771"
         private const val ADDRESS_POOL = 50
+
+        /**
+         * Version of the on-device mwebd chain database layout / sync
+         * behaviour this app expects. Bump whenever `libgojni.so` is updated
+         * in a way that changes what is written to `neutrino.db` (e.g. the
+         * AuxPoW merkle-block parsing fix). The first daemon start after a
+         * bump wipes the per-chain data dir once so a database written by an
+         * older daemon can never stall the sync.
+         */
+        private const val DB_SCHEMA_KEY = "mweb-native-v2"
     }
 
     private val mweb = JunkcoinMweb()
@@ -64,8 +74,18 @@ class MwebRepository @Inject constructor(
             val peer = if (chain == TESTNET) TESTNET_PEER else MAINNET_PEER
             // Separate chain data dirs: the neutrino DB is chain specific.
             // mwebd does not create the parent directory itself.
-            val dataDir = File(context.filesDir, "mwebd-$chain").also { it.mkdirs() }.absolutePath
-            mweb.start(chain = chain, dataDir = dataDir, peerAddr = peer)
+            val dataDir = File(context.filesDir, "mwebd-$chain")
+            // One-time wipe after a native daemon upgrade: a database written
+            // by an older binary can stall SPV/MWEB sync and there is no
+            // in-place migration.
+            val wipeStaleDb = !storage.isMwebDbReset(DB_SCHEMA_KEY)
+            if (wipeStaleDb && dataDir.exists()) {
+                Log.w(TAG, "Wiping stale MWEB chain data for $chain (schema $DB_SCHEMA_KEY)")
+                dataDir.deleteRecursively()
+            }
+            dataDir.mkdirs()
+            mweb.start(chain = chain, dataDir = dataDir.absolutePath, peerAddr = peer)
+            if (wipeStaleDb) storage.setMwebDbReset(DB_SCHEMA_KEY, true)
             startedChain = chain
             Log.d(TAG, "MWEB daemon started for $chain ($peer)")
             true
@@ -97,6 +117,23 @@ class MwebRepository @Inject constructor(
         } catch (e: Exception) {
             Log.e(TAG, "Failed to get MWEB status: ${e.message}")
             null
+        }
+    }
+
+    /**
+     * Check which of the given MWEB outputIds have been spent (i.e. appeared in the
+     * confirmed MWEB kernel set). Returns the subset of input outputIds that are spent.
+     * A daemon-down condition or any exception returns an empty list (safe no-op).
+     */
+    suspend fun isSpent(outputIds: List<String>): List<String> = withContext(Dispatchers.IO) {
+        if (outputIds.isEmpty()) return@withContext emptyList()
+        if (!ensureRunning()) return@withContext emptyList()
+        try {
+            val spent = mweb.spent(outputIds)
+            spent
+        } catch (e: Exception) {
+            Log.w(TAG, "isSpent query failed (daemon down?): ${e.message}")
+            emptyList()
         }
     }
 
@@ -176,7 +213,7 @@ class MwebRepository @Inject constructor(
         recipientAddress: String,
         amount: Long,
         feeRatePerKb: Long = 1000
-    ): ByteArray? = withContext(Dispatchers.IO) {
+    ): MwebSpendResult? = withContext(Dispatchers.IO) {
         try {
             if (amount <= 0) {
                 Log.e(TAG, "Invalid MWEB amount: $amount")
@@ -257,7 +294,13 @@ class MwebRepository @Inject constructor(
             )
             val rawTx = JunkcoinMweb.hexToBytes(result.rawTxHex)
             Log.d(TAG, "MWEB tx created: ${rawTx.size} bytes, ${result.outputIds.size} outputs")
-            rawTx
+            MwebSpendResult(
+                rawTx = rawTx,
+                spentOutputIds = inputs.map { it.outputId },
+                // Coins the daemon created for this wallet (the change
+                // outputs): they must not be booked as incoming payments.
+                changeOutputIds = result.outputIds
+            )
         } catch (e: Exception) {
             Log.e(TAG, "Failed to create MWEB transaction: ${e.message}", e)
             null
@@ -413,7 +456,8 @@ private fun MwebUtxoInfo.toMwebUtxo() = MwebUtxo(
     address = address,
     value = value,
     outputId = outputId,
-    blockTime = blockTime
+    blockTime = blockTime,
+    height = height
 )
 
 /**
@@ -423,5 +467,33 @@ data class MwebUtxo(
     val address: String,
     val value: Long,
     val outputId: String,
-    val blockTime: Long
+    val blockTime: Long,
+    /** Block height the output was confirmed at; 0 while unconfirmed. */
+    val height: Int = 0
 )
+
+/**
+ * Result of an MWEB spend transaction build
+ */
+data class MwebSpendResult(
+    val rawTx: ByteArray,
+    /** MWEB output ids consumed as inputs by this transaction. */
+    val spentOutputIds: List<String>,
+    /** Change coins the daemon created for this wallet. */
+    val changeOutputIds: List<String> = emptyList()
+) {
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is MwebSpendResult) return false
+        return rawTx.contentEquals(other.rawTx) &&
+            spentOutputIds == other.spentOutputIds &&
+            changeOutputIds == other.changeOutputIds
+    }
+
+    override fun hashCode(): Int {
+        var result = rawTx.contentHashCode()
+        result = 31 * result + spentOutputIds.hashCode()
+        result = 31 * result + changeOutputIds.hashCode()
+        return result
+    }
+}

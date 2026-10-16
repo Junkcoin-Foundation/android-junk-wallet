@@ -23,6 +23,7 @@ import junkwallet.domain.model.AddressType
 import junkwallet.domain.model.NetworkType
 import junkwallet.domain.model.TransactionInfo
 import junkwallet.domain.model.WalletAccount
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
@@ -462,7 +463,13 @@ class WalletStorage @Inject constructor(
 
     fun deleteAccountStorage(accountId: String) {
         val storageKey = "${KEY_ACCOUNT_ENCRYPTED_WIF_PREFIX}$accountId"
-        prefs.edit().remove(storageKey).apply()
+        val editor = prefs.edit().remove(storageKey)
+        // Drop the account's MWEB ledger for both networks too.
+        for (network in listOf("mainnet", "testnet")) {
+            editor.remove("mweb_txs_${accountId}_$network")
+            editor.remove("mweb_self_outputs_${accountId}_$network")
+        }
+        editor.apply()
     }
 
     fun migrateSingleWalletToAccount() {
@@ -508,12 +515,67 @@ class WalletStorage @Inject constructor(
         }
     }
 
+    // ── Peg-in markers (label peg-ins in the history) ──
+
+    @Serializable
+    data class PeginMarker(
+        val txid: String,
+        val outputId: String = "",
+        val amount: Long = 0,
+        val fundingAddress: String = "",
+        val mwebAddress: String = "",
+        val createdAt: Long = 0,
+        val linked: Boolean = false
+    )
+
+    fun addPegInMarker(accountId: String, network: String, marker: PeginMarker) {
+        val existing = getPegInMarkers(accountId, network).filterNot { it.txid == marker.txid }
+        val updated = (listOf(marker) + existing).take(100)
+        prefs.edit().putString("mweb_pegins_${accountId}_$network", Json.encodeToString(updated)).apply()
+    }
+
+    fun getPegInMarkers(accountId: String, network: String): List<PeginMarker> {
+        val jsonStr = prefs.getString("mweb_pegins_${accountId}_$network", null) ?: return emptyList()
+        return try {
+            Json.decodeFromString<List<PeginMarker>>(jsonStr)
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    fun setPegInMarkers(accountId: String, network: String, markers: List<PeginMarker>) {
+        prefs.edit().putString("mweb_pegins_${accountId}_$network", Json.encodeToString(markers)).apply()
+    }
+
     fun isMwebDbReset(versionKey: String): Boolean {
         return prefs.getBoolean("mweb_db_reset_$versionKey", false)
     }
 
     fun setMwebDbReset(versionKey: String, reset: Boolean) {
         prefs.edit().putBoolean("mweb_db_reset_$versionKey", reset).apply()
+    }
+
+    // ── MWEB self-created outputs (change) ──
+
+    /**
+     * Output ids the daemon created for this wallet as change. They are part
+     * of MWEB scans but must never be recorded as incoming payments.
+     */
+    fun getMwebSelfOutputs(accountId: String, network: String): List<String> {
+        val jsonStr = prefs.getString("mweb_self_outputs_${accountId}_$network", null)
+            ?: return emptyList()
+        return try {
+            Json.decodeFromString<List<String>>(jsonStr)
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    fun addMwebSelfOutputs(accountId: String, network: String, outputIds: List<String>) {
+        if (outputIds.isEmpty()) return
+        val existing = getMwebSelfOutputs(accountId, network)
+        val merged = (existing + outputIds).distinct()
+        prefs.edit().putString("mweb_self_outputs_${accountId}_$network", Json.encodeToString(merged)).apply()
     }
 
 

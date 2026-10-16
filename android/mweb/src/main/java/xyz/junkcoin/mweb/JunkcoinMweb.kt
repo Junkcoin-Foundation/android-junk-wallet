@@ -313,6 +313,8 @@ class JunkcoinMweb {
         }
 
         private fun parseStringArray(json: String): List<String> {
+            // Go marshals a nil slice as JSON null; treat that as empty.
+            if (json.isBlank() || json == "null") return emptyList()
             val arr = JSONArray(json)
             return buildList {
                 for (i in 0 until arr.length()) add(arr.getString(i))

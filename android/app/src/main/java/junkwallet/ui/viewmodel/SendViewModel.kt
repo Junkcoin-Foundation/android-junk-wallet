@@ -276,14 +276,45 @@ class SendViewModel @Inject constructor(
         }
         if (state.detectedAddressType == AddressType.MWEB) {
             // Peg-in: amount + kernel fee + transparent fee must fit the
-            // balance. The kernel fee is size based (independent of value).
+            // balance. The transparent fee grows with the number of inputs,
+            // and spending (nearly) the whole balance needs (nearly) all
+            // UTXOs, so mirror the largest-first input selection used by
+            // MwebRepository.createPegin() instead of assuming one input
+            // (that assumption made MAX short by ~1480 sat).
             viewModelScope.launch {
                 val mwebFee = estimateMwebFee(state.recipientAddress, 1L, feePerByte)
-                val ltcFee = peginLtcFee(feePerByte)
-                val maxSendable = state.balance - mwebFee - ltcFee
-                if (maxSendable > 0) {
-                    val amountStr = String.format("%.8f", maxSendable / 100_000_000.0)
-                    _uiState.update { it.copy(amount = amountStr, feeEstimate = mwebFee + ltcFee) }
+                val valuesDesc = try {
+                    blockchainRepository.getUtxos(blockchainRepository.getWalletAddress())
+                        .filter { it.status.confirmed }
+                        .map { it.value }
+                        .sortedDescending()
+                } catch (e: Exception) {
+                    Log.e("SendVM", "fillMaxAmount peg-in: utxo fetch failed: ${e.message}")
+                    emptyList()
+                }
+                var total = 0L
+                var count = 0
+                var best = 0L
+                var bestCount = 1
+                for (v in valuesDesc) {
+                    total += v
+                    count++
+                    val maxForN = total - mwebFee - peginLtcFee(feePerByte, count)
+                    if (maxForN > best) {
+                        best = maxForN
+                        bestCount = count
+                    }
+                }
+                if (valuesDesc.isEmpty()) {
+                    // Fallback: single-input estimate against the UI balance.
+                    best = state.balance - mwebFee - peginLtcFee(feePerByte, 1)
+                    bestCount = 1
+                }
+                if (best > 0) {
+                    val amountStr = String.format("%.8f", best / 100_000_000.0)
+                    _uiState.update {
+                        it.copy(amount = amountStr, feeEstimate = mwebFee + peginLtcFee(feePerByte, bestCount))
+                    }
                 }
             }
             return
@@ -353,7 +384,11 @@ class SendViewModel @Inject constructor(
      * pegin output + worst case change output (mirrors
      * MwebRepository.createPegin).
      */
-    private fun peginLtcFee(feePerByte: Long): Long = (10 + 148 + 43 + 43) * feePerByte
+    private fun peginLtcFee(feePerByte: Long): Long = peginLtcFee(feePerByte, 1)
+
+    /** Same per-input transparent fee model as MwebRepository.createPegin(). */
+    private fun peginLtcFee(feePerByte: Long, inputs: Int): Long =
+        (10 + 148 * inputs + 43 + 43) * feePerByte
 
     private fun estimateFee() {
         viewModelScope.launch {
@@ -444,7 +479,7 @@ class SendViewModel @Inject constructor(
                     val wif = blockchainRepository.getWif() ?: throw Exception("Wallet locked")
                     val keychain = MwebKeychain.fromWif(wif)
                         ?: throw Exception("MWEB keys unavailable")
-                    val rawTx = mwebRepository.createTransaction(
+                    val spend = mwebRepository.createTransaction(
                         scanSecret = keychain.scanSecret,
                         spendSecret = keychain.spendSecret,
                         spendPub = keychain.spendPub,
@@ -452,13 +487,43 @@ class SendViewModel @Inject constructor(
                         amount = amountSatoshis,
                         feeRatePerKb = state.feePerByte * 1000
                     ) ?: throw Exception("Failed to create MWEB transaction")
-                    val mwebTxid = mwebRepository.broadcast(rawTx)
+                    // The daemon relay can "succeed" (a peer requests the tx)
+                    // while the node still never accepts it, so log the raw
+                    // tx and hand it to the explorer as well: its response is
+                    // the node's verdict and doubles as a fallback relay
+                    // when the daemon path fails.
+                    val rawHex = spend.rawTx.joinToString("") { "%02x".format(it) }
+                    Log.d("SendVM", "MWEB rawTx ${spend.rawTx.size} bytes / ${rawHex.length} hex chars")
+                    rawHex.chunked(1800).forEachIndexed { i, chunk ->
+                        Log.d("SendVM", "MWEB rawTx[$i]: $chunk")
+                    }
+                    val daemonTxid = mwebRepository.broadcast(spend.rawTx)
+                    Log.d("SendVM", "daemon MWEB broadcast result: $daemonTxid")
+                    val esploraTxid = blockchainRepository.broadcastRawVerbose(rawHex)
+                    Log.d("SendVM", "esplora MWEB broadcast result: $esploraTxid")
+                    // Prefer the explorer verdict: it is the node's own
+                    // accept/reject decision. The daemon relay only proves a
+                    // peer requested the transaction, not that any node
+                    // accepted it (those became phantom coins).
+                    val mwebTxid = esploraTxid ?: daemonTxid
                         ?: throw Exception("Failed to broadcast MWEB transaction")
                     Log.d("SendVM", "MWEB spend broadcast: $mwebTxid")
-                    mwebRepository.addMempoolTx(rawTx)
+                    mwebRepository.addMempoolTx(spend.rawTx)
 
                     val activeAccount = storage.getActiveAccountId() ?: ""
                     val netName = if (currentNetwork == JunkcoinNetwork.TESTNET) "testnet" else "mainnet"
+
+                    // Ledger bookkeeping for the MWEB history:
+                    //  - the consumed outputs are no longer "received", drop
+                    //    their entries (the send below replaces them),
+                    //  - the daemon's change coins belong to this wallet and
+                    //    must never be booked as incoming payments.
+                    storage.addMwebSelfOutputs(activeAccount, netName, spend.changeOutputIds)
+                    val spent = spend.spentOutputIds.toSet()
+                    val remaining = storage.getMwebTransactions(activeAccount, netName)
+                        .filterNot { !it.isSent && it.txid in spent }
+                    storage.setMwebTransactions(activeAccount, netName, remaining)
+
                     storage.saveMwebTransaction(
                         accountId = activeAccount,
                         network = netName,
@@ -471,7 +536,9 @@ class SendViewModel @Inject constructor(
                             sent = amountSatoshis,
                             received = 0L,
                             isSent = true,
-                            isMweb = true
+                            isMweb = true,
+                            kind = if (state.detectedAddressType == AddressType.MWEB) "MWEB_SEND" else "PEG_OUT",
+                            peer = state.recipientAddress
                         )
                     )
 
@@ -506,6 +573,14 @@ class SendViewModel @Inject constructor(
                         ?: throw Exception("MWEB keys unavailable")
                     val privKeyHex = crypto.getPrivateKeyBytes(keyPair.private)
                         .joinToString("") { "%02x".format(it) }
+                    // Snapshot the MWEB coin set first: the coin this peg-in
+                    // creates is the only new one after the mempool record,
+                    // which lets the history label it as a peg-in.
+                    val mwebIdsBefore = try {
+                        mwebRepository.getUtxos(keychain.scanSecret).map { it.outputId }.toHashSet()
+                    } catch (_: Exception) {
+                        emptySet()
+                    }
                     Log.d("SendVM", "Building peg-in: amount=$amountSatoshis")
                     val pegin = mwebRepository.createPegin(
                         utxos = utxos,
@@ -518,23 +593,48 @@ class SendViewModel @Inject constructor(
                         feePerByte = feePerByte
                     ) ?: throw Exception("Failed to build peg-in transaction")
                     Log.d("SendVM", "Peg-in built: txid=${pegin.txid}, fee=${pegin.fee}")
-                    // Broadcast: Try MWEB daemon P2P first, fall back to Blockchain API (Esplora / sendrawtransaction)
-                    var peginTxid = mwebRepository.broadcast(pegin.rawTx)
-                    if (peginTxid == null) {
-                        Log.w("SendVM", "MWEB P2P broadcast failed or returned null, attempting fallback via Blockchain API...")
-                        val rawTxHex = pegin.rawTx.joinToString("") { "%02x".format(it) }
-                        val broadcastSuccess = blockchainRepository.broadcastTransaction(rawTxHex)
-                        if (broadcastSuccess) {
-                            peginTxid = pegin.txid
-                            Log.d("SendVM", "Peg-in broadcasted successfully via Blockchain API: $peginTxid")
-                        }
+                    val peginRawHex = pegin.rawTx.joinToString("") { "%02x".format(it) }
+                    Log.d("SendVM", "Peg-in rawTx ${pegin.rawTx.size} bytes / ${peginRawHex.length} hex chars")
+                    peginRawHex.chunked(1800).forEachIndexed { i, chunk ->
+                        Log.d("SendVM", "Peg-in rawTx[$i]: $chunk")
                     }
+                    // Broadcast to both relays and prefer the explorer verdict:
+                    // its POST is the node's own accept/reject decision, while
+                    // a daemon "success" only proves a peer requested the
+                    // transaction (the same trap that created phantom coins).
+                    val daemonPeginTxid = mwebRepository.broadcast(pegin.rawTx)
+                    Log.d("SendVM", "daemon peg-in broadcast result: $daemonPeginTxid")
+                    val esploraPeginTxid = blockchainRepository.broadcastRawVerbose(peginRawHex)
+                    Log.d("SendVM", "esplora peg-in broadcast result: $esploraPeginTxid")
+                    val peginTxid = esploraPeginTxid ?: daemonPeginTxid
 
                     if (peginTxid == null) {
                         throw Exception("Failed to broadcast peg-in")
                     }
                     Log.d("SendVM", "Peg-in broadcast: $peginTxid")
                     mwebRepository.addMempoolTx(pegin.rawTx)
+
+                    // Remember the peg-in so the history can label the
+                    // incoming MWEB coin (and its transparent funding tx).
+                    val createdCoin = try {
+                        mwebRepository.getUtxos(keychain.scanSecret)
+                            .firstOrNull { it.outputId !in mwebIdsBefore && it.value == amountSatoshis }
+                    } catch (_: Exception) {
+                        null
+                    }
+                    storage.addPegInMarker(
+                        accountId = storage.getActiveAccountId() ?: "",
+                        network = if (currentNetwork == JunkcoinNetwork.TESTNET) "testnet" else "mainnet",
+                        marker = WalletStorage.PeginMarker(
+                            txid = peginTxid,
+                            outputId = createdCoin?.outputId ?: "",
+                            amount = amountSatoshis,
+                            fundingAddress = walletAddress,
+                            mwebAddress = state.recipientAddress,
+                            createdAt = System.currentTimeMillis() / 1000
+                        )
+                    )
+                    Log.d("SendVM", "Peg-in marker saved (coin=${createdCoin?.outputId ?: "unmatched"})")
 
                     _uiState.update {
                         it.copy(

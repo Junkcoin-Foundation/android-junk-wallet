@@ -190,16 +190,34 @@ class WalletViewModel @Inject constructor(
         val activeAccount = storage.getActiveAccountId() ?: ""
         val netName = networkName(_uiState.value.network)
         val mwebTxs = storage.getMwebTransactions(activeAccount, netName)
-        if (mwebTxs.isEmpty()) return transparentTxs
 
-        val transparentTxids = transparentTxs.map { it.txid }.toSet()
+        // Callers may pass a list that already contains MWEB entries
+        // (syncMwebBalance merges the current UI list). Keep only genuinely
+        // transparent transactions on this side: treating those MWEB entries
+        // as transparent made every stored MWEB txid look misclassified, so
+        // the cleanup below erased MWEB history from storage on every sync
+        // and the entries flickered in and out of the history page.
+        val pureTransparent = transparentTxs.filterNot { it.isMweb }
+        // Label peg-in funding transactions on the transparent side too.
+        val pegInByTxid = storage.getPegInMarkers(activeAccount, netName).associateBy { it.txid }
+        val labelledTransparent = if (pegInByTxid.isEmpty()) pureTransparent else pureTransparent.map { t ->
+            val marker = pegInByTxid[t.txid]
+            if (marker != null && t.kind.isEmpty()) t.copy(kind = "PEG_IN", peer = marker.mwebAddress) else t
+        }
+        if (mwebTxs.isEmpty()) return labelledTransparent
+
+        val transparentTxids = labelledTransparent.map { it.txid }.toSet()
         // Never allow a transparent transaction to be misclassified as MWEB spend,
         // and drop legacy failed 0-input spends.
         val validMwebTxs = mwebTxs.filterNot { it.txid in transparentTxids || it.txid.startsWith("b348bff48d5e") }
         if (validMwebTxs.size != mwebTxs.size) {
+            Log.d("WalletVM", "merge: dropped ${mwebTxs.size - validMwebTxs.size} misclassified MWEB tx(s)")
             storage.setMwebTransactions(activeAccount, netName, validMwebTxs)
         }
-        return (transparentTxs + validMwebTxs).sortedByDescending { it.blockTime ?: 0L }
+        return (labelledTransparent + validMwebTxs)
+            .distinctBy { it.txid }
+            // Stable order: equal timestamps must not reorder between syncs.
+            .sortedWith(compareByDescending<TransactionInfo> { it.blockTime ?: 0L }.thenBy { it.txid })
     }
 
     fun syncWallet() {
@@ -965,7 +983,12 @@ class WalletViewModel @Inject constructor(
     }
 
     /**
-     * Sync MWEB balance
+     * Sync MWEB balance.
+     *
+     * One daemon scan yields both the balance and the fresh UTXO list. New
+     * outputs become "received" entries (unless they are this wallet's own
+     * change), and outputs that disappeared from the daemon's UTXO set are
+     * reconciled away once the daemon has scanned past their height.
      */
     fun syncMwebBalance() {
         viewModelScope.launch {
@@ -974,37 +997,153 @@ class WalletViewModel @Inject constructor(
                     Log.w("WalletVM", "No MWEB keys: wallet locked")
                     return@launch
                 }
-                val balance = mwebRepository.getBalance(keys.scanSecret)
-                _mwebBalance.value = balance
-                Log.d("WalletVM", "MWEB balance: $balance sat")
-
                 val utxos = mwebRepository.getUtxos(keys.scanSecret)
+                _mwebBalance.value = utxos.sumOf { it.value }
+                Log.d("WalletVM", "MWEB balance: ${_mwebBalance.value} sat, ${utxos.size} utxos")
+
                 val activeAccount = storage.getActiveAccountId() ?: ""
                 val netName = networkName(_uiState.value.network)
                 val existingMwebTxs = storage.getMwebTransactions(activeAccount, netName)
+                val selfOutputs = storage.getMwebSelfOutputs(activeAccount, netName).toSet()
+                val knownTxids = existingMwebTxs.map { it.txid }.toSet()
+
+                val existingByOutputId = existingMwebTxs.associateBy { it.txid }
+
                 for (utxo in utxos) {
-                    val alreadyRecorded = existingMwebTxs.any { it.txid == utxo.outputId }
-                    if (!alreadyRecorded) {
-                        val rxTx = TransactionInfo(
-                            txid = utxo.outputId,
-                            confirmed = true,
-                            blockHeight = null,
-                            blockTime = if (utxo.blockTime > 0) utxo.blockTime else System.currentTimeMillis() / 1000,
-                            fee = 0L,
-                            sent = 0L,
-                            received = utxo.value,
-                            isSent = false,
-                            isMweb = true
-                        )
-                        storage.saveMwebTransaction(activeAccount, netName, rxTx)
+                    if (utxo.outputId in selfOutputs) continue
+                    if (utxo.outputId in knownTxids) {
+                        // Booked earlier (e.g. from the mempool record right
+                        // after broadcasting): refresh it once mined so the
+                        // entry stops showing "Pending" forever.
+                        val entry = existingByOutputId[utxo.outputId]
+                        if (entry != null && utxo.height > 0 && !entry.confirmed) {
+                            storage.saveMwebTransaction(
+                                activeAccount,
+                                netName,
+                                entry.copy(
+                                    confirmed = true,
+                                    blockHeight = utxo.height,
+                                    blockTime = if (utxo.blockTime > 0) utxo.blockTime else entry.blockTime
+                                )
+                            )
+                        }
+                        continue
                     }
+                    val confirmed = utxo.height > 0
+                    val rxTx = TransactionInfo(
+                        txid = utxo.outputId,
+                        confirmed = confirmed,
+                        // 0 = still in the mempool: no height, timestamp now.
+                        blockHeight = utxo.height.takeIf { it > 0 },
+                        blockTime = if (confirmed && utxo.blockTime > 0) {
+                            utxo.blockTime
+                        } else {
+                            System.currentTimeMillis() / 1000
+                        },
+                        fee = 0L,
+                        sent = 0L,
+                        received = utxo.value,
+                        isSent = false,
+                        isMweb = true,
+                        kind = "MWEB_RECEIVE"
+                    )
+                    storage.saveMwebTransaction(activeAccount, netName, rxTx)
                 }
+
+                linkPegInMarkers(activeAccount, netName)
+                reconcileSpentMwebReceives(activeAccount, netName)
+
                 val mergedTxs = mergeWithMwebTransactions(_uiState.value.transactions)
                 _uiState.update { it.copy(transactions = mergedTxs) }
             } catch (e: Exception) {
                 Log.e("WalletVM", "Failed to sync MWEB balance: ${e.message}")
             }
         }
+    }
+
+    /**
+     * Drop "received" MWEB entries whose output no longer exists in the
+     * daemon's UTXO set (spent, e.g. from another device with the same keys).
+     *
+     * Only reached heights are reconciled: an entry is checked once the
+     * daemon's MWEB UTXO scan has passed the height it was confirmed at, so
+     * a partially synced daemon can never report an existing coin as spent.
+     */
+    private suspend fun reconcileSpentMwebReceives(activeAccount: String, netName: String) {
+        val stored = storage.getMwebTransactions(activeAccount, netName)
+        if (stored.isEmpty()) return
+        val utxoHeight = mwebRepository.status()?.mwebUtxosHeight ?: 0
+        if (utxoHeight <= 0) return
+
+        val checkable = stored.filter {
+            !it.isSent && it.blockHeight != null && it.blockHeight!! <= utxoHeight
+        }
+        if (checkable.isEmpty()) return
+
+        val spent = mwebRepository.isSpent(checkable.map { it.txid })
+        if (spent.isEmpty()) return
+
+        val spentSet = spent.toSet()
+        val remaining = stored.filterNot { !it.isSent && it.txid in spentSet }
+        if (remaining.size != stored.size) {
+            Log.d("WalletVM", "MWEB history: removed ${stored.size - remaining.size} spent receive(s)")
+            storage.setMwebTransactions(activeAccount, netName, remaining)
+        }
+    }
+
+    /**
+     * Relabel just-booked MWEB coins that came from a peg-in (marker saved by
+     * SendViewModel at broadcast time) and keep the markers around so the
+     * transparent-side history can label the funding tx as well.
+     */
+    private fun linkPegInMarkers(activeAccount: String, netName: String) {
+        val markers = storage.getPegInMarkers(activeAccount, netName)
+        if (markers.isEmpty()) return
+        val txs = storage.getMwebTransactions(activeAccount, netName)
+        val now = System.currentTimeMillis() / 1000
+        var txsChanged = false
+        var markersChanged = false
+        val updatedTxs = txs.toMutableList()
+        val remaining = mutableListOf<WalletStorage.PeginMarker>()
+
+        for (m in markers) {
+            var idx = -1
+            if (m.outputId.isNotEmpty()) {
+                idx = updatedTxs.indexOfFirst { it.txid == m.outputId }
+            }
+            if (idx < 0 && m.amount > 0) {
+                // Fallback when the output id could not be captured: the only
+                // fresh incoming coin with exactly this value.
+                val candidates = updatedTxs.withIndex().filter { (_, t) ->
+                    !t.isSent && t.received == m.amount && t.kind != "PEG_IN" &&
+                        (t.blockTime ?: 0L) >= m.createdAt - 600
+                }
+                if (candidates.size == 1) idx = candidates[0].index
+            }
+
+            if (idx >= 0) {
+                val entry = updatedTxs[idx]
+                if (entry.kind != "PEG_IN" || entry.peer != m.fundingAddress) {
+                    updatedTxs[idx] = entry.copy(kind = "PEG_IN", peer = m.fundingAddress)
+                    txsChanged = true
+                }
+                if (!m.linked) {
+                    remaining.add(m.copy(linked = true))
+                    markersChanged = true
+                } else {
+                    remaining.add(m)
+                }
+            } else if (m.linked || now - m.createdAt < 48 * 3600) {
+                // Keep linked markers (transparent-side labels) and give
+                // fresh markers time to match; drop stale unlinked ones.
+                remaining.add(m)
+            } else {
+                markersChanged = true
+            }
+        }
+
+        if (txsChanged) storage.setMwebTransactions(activeAccount, netName, updatedTxs)
+        if (markersChanged) storage.setPegInMarkers(activeAccount, netName, remaining)
     }
 
     /**
